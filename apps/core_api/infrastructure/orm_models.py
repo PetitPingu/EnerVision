@@ -7,7 +7,7 @@ Tables créées dans le schéma `enervision` (voir db/init/001-init-timescaledb.
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, ForeignKey, String
+from sqlalchemy import ARRAY, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -73,3 +73,29 @@ class Alert(Base):
     threshold: Mapped[float | None]
 
     site: Mapped["Site"] = relationship(back_populates="alerts")
+
+
+class ConsumptionReading(Base):
+    """Lecture transformée depuis le bucket MinIO raw par le Worker ETL
+    (issue #19, voir docs/seq_etl.md).
+
+    Pas de clé étrangère vers Site : le job de transformation ne
+    synchronise pas la table sites, site_id est un simple champ texte.
+    """
+
+    __tablename__ = "consumption_readings"
+    __table_args__ = {"schema": "enervision"}
+
+    site_id: Mapped[str] = mapped_column(String, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(primary_key=True)
+    site_type: Mapped[str | None]
+    consumption_kw: Mapped[float | None]
+    consumption_kwh: Mapped[float | None]
+    voltage_v: Mapped[float | None]
+    current_a: Mapped[float | None]
+    power_factor: Mapped[float | None]
+    temperature_celsius: Mapped[float | None]
+    humidity_percent: Mapped[float | None]
+    null_reasons: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    data_quality: Mapped[str | None]
+    ingested_at: Mapped[datetime] = mapped_column(server_default=func.now())

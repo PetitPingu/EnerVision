@@ -1,9 +1,8 @@
 ## 2. Schéma de la base de données postgres
 
-Les tables ci-dessous existent réellement (schéma `enervision`, créées via
-Alembic pour `sites`/`readings`/`alerts` et via
-`db/init/002-consumption-readings.sql` pour `consumption_readings`) :
-clé naturelle `site_id` (text, l'identifiant renvoyé par l'API mock, ex.
+Les tables ci-dessous existent réellement (schéma `enervision`, toutes
+créées via Alembic — voir apps/core_api/alembic/versions/) : clé
+naturelle `site_id` (text, l'identifiant renvoyé par l'API mock, ex.
 `SITE001`), pas d'UUID — plus simple à corréler directement avec les
 payloads de l'API et les objets MinIO sans jointure supplémentaire.
 `USERS`, `PREDICTIONS` et `RECOMMENDATIONS` restent des propositions non

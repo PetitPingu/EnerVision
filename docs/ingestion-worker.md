@@ -20,19 +20,27 @@ invariant lecture-seule).
 
 ## Démarrer l'infra nécessaire
 
-Pas besoin de `core_api`/`prediction`/etc. pour ce worker :
+`consumption_readings` est créée par une migration Alembic
+(`apps/core_api/alembic/versions/0e803d9159b4_create_consumption_readings.py`,
+gérée avec les autres tables — voir [archi_database.md](archi_database.md)),
+appliquée automatiquement au démarrage du conteneur `core_api`
+(`alembic upgrade head`, voir son Dockerfile). Il faut donc lancer
+`core_api` au moins une fois avant le worker ETL, même si celui-ci ne
+l'appelle jamais directement :
 
 ```bash
-docker compose up -d postgres minio minio-init
+docker compose up -d postgres minio minio-init core_api
 ```
 
-Si Postgres avait déjà été démarré **avant** ce ticket, la table
-`consumption_readings` n'existe pas encore (les scripts de `db/init/` ne
-s'exécutent qu'une fois, sur un volume vide) :
+`core_api` dépend à son tour de `prediction`/`recommendation` dans
+`docker-compose.yml` (`depends_on`) — tant qu'ils n'ont pas de Dockerfile,
+appliquer la migration à la main suffit :
 
 ```bash
-docker compose down -v
-docker compose up -d postgres minio minio-init
+docker compose build core_api
+docker run --rm --network enervision_enervision-net \
+  -e DATABASE_URL="postgresql+psycopg://enervision:changeme@postgres:5432/enervision" \
+  enervision-core_api sh -c "alembic upgrade head"
 ```
 
 ## Lancer le worker en local
