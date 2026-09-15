@@ -142,21 +142,15 @@ services:
       context: .
       dockerfile: apps/etl_worker/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       ENERVISION_API_HOST: ${ENERVISION_API_HOST}
       ENERVISION_API_PORT: ${ENERVISION_API_PORT}
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET:-raw}
-      REDIS_URL: redis://redis:6379/0
       ETL_POLL_INTERVAL_SECONDS: ${ETL_POLL_INTERVAL_SECONDS:-60}
     depends_on:
-      postgres:
-        condition: service_healthy
       minio:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     networks:
       - enervision-net

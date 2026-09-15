@@ -1,9 +1,9 @@
-"""Point d'entrée du worker ETL (docs/seq_etl.md).
+"""Point d'entrée du worker d'ingestion (docs/seq_etl.md).
 
 Un seul job planifié (APScheduler), toutes les ETL_POLL_INTERVAL_SECONDS
-secondes : récupère les dernières lectures (GET /api/v1/readings), les
-dépose brutes dans le bucket raw, les insère dans consumption_readings,
-et publie une alerte Redis pour toute lecture critical.
+secondes : récupère les dernières lectures (GET /api/v1/readings) et les
+dépose brutes dans le bucket raw. L'insertion en base et la détection
+d'alerte sont hors périmètre de ce worker (branche séparée).
 """
 
 import logging

@@ -41,16 +41,10 @@ def _critical_reading(**overrides) -> EnergyReading:
 
 
 def _job(**overrides):
-    defaults = dict(
-        api_client=Mock(),
-        raw_writer=Mock(),
-        readings_writer=Mock(),
-        alert_publisher=Mock(),
-    )
+    defaults = dict(api_client=Mock(), raw_writer=Mock())
     defaults.update(overrides)
     job = EtlJob(**defaults)
-    job.raw_writer.write.return_value = "2026-09-15/SITE001_20260915T100013879434.json"
-    job.readings_writer.insert.return_value = True
+    job.raw_writer.write.return_value = "SITE001/2026/09/15/17/30.json"
     return job
 
 
@@ -65,108 +59,43 @@ def test_run_calls_get_readings_with_limit_7():
     assert kwargs["limit"] == 7
 
 
-def test_process_writes_raw_and_inserts_in_db():
+def test_process_writes_raw_payload_unmodified():
     reading = _reading()
     api_client = Mock()
     api_client.get_readings.return_value = [reading]
     raw_writer = Mock()
-    raw_writer.write.return_value = "2026-09-15/SITE001_x.json"
-    readings_writer = Mock()
-    readings_writer.insert.return_value = True
-    alert_publisher = Mock()
+    raw_writer.write.return_value = "SITE001/2026/09/15/17/30.json"
 
-    job = _job(
-        api_client=api_client,
-        raw_writer=raw_writer,
-        readings_writer=readings_writer,
-        alert_publisher=alert_publisher,
-    )
+    job = _job(api_client=api_client, raw_writer=raw_writer)
     job.run()
 
     raw_writer.write.assert_called_once_with(
         site_id="SITE001", timestamp=reading.timestamp, raw_payload=reading.raw_payload
     )
-    readings_writer.insert.assert_called_once_with(reading)
-    alert_publisher.publish.assert_not_called()  # data_quality "good" : pas d'alerte
 
 
-def test_process_publishes_alert_for_critical_reading():
-    reading = _critical_reading()
-    api_client = Mock()
-    api_client.get_readings.return_value = [reading]
-    alert_publisher = Mock()
-
-    job = _job(api_client=api_client, alert_publisher=alert_publisher)
-    job.run()
-
-    alert_publisher.publish.assert_called_once_with(reading)
-
-
-def test_critical_reading_is_still_written_and_inserted_not_skipped():
+def test_critical_reading_is_written_like_any_other():
     reading = _critical_reading()
     api_client = Mock()
     api_client.get_readings.return_value = [reading]
     raw_writer = Mock()
-    raw_writer.write.return_value = "2026-09-15/SITE001_x.json"
-    readings_writer = Mock()
-    readings_writer.insert.return_value = True
+    raw_writer.write.return_value = "SITE001/2026/09/15/17/30.json"
 
-    job = _job(api_client=api_client, raw_writer=raw_writer, readings_writer=readings_writer)
+    job = _job(api_client=api_client, raw_writer=raw_writer)
     job.run()
 
     raw_writer.write.assert_called_once()
-    readings_writer.insert.assert_called_once_with(reading)
 
 
-def test_db_failure_does_not_prevent_raw_write_or_alert():
-    reading = _critical_reading()
-    api_client = Mock()
-    api_client.get_readings.return_value = [reading]
-    raw_writer = Mock()
-    raw_writer.write.return_value = "2026-09-15/SITE001_x.json"
-    readings_writer = Mock()
-    readings_writer.insert.side_effect = RuntimeError("db down")
-    alert_publisher = Mock()
-
-    job = _job(
-        api_client=api_client,
-        raw_writer=raw_writer,
-        readings_writer=readings_writer,
-        alert_publisher=alert_publisher,
-    )
-    job.run()  # ne doit pas lever
-
-    raw_writer.write.assert_called_once()
-    alert_publisher.publish.assert_called_once_with(reading)
-
-
-def test_alert_failure_does_not_prevent_db_insert():
-    reading = _critical_reading()
-    api_client = Mock()
-    api_client.get_readings.return_value = [reading]
-    readings_writer = Mock()
-    readings_writer.insert.return_value = True
-    alert_publisher = Mock()
-    alert_publisher.publish.side_effect = RuntimeError("redis down")
-
-    job = _job(api_client=api_client, readings_writer=readings_writer, alert_publisher=alert_publisher)
-    job.run()  # ne doit pas lever
-
-    readings_writer.insert.assert_called_once_with(reading)
-
-
-def test_raw_write_failure_skips_reading_without_crashing():
+def test_raw_write_failure_does_not_crash():
     reading = _reading()
     api_client = Mock()
     api_client.get_readings.return_value = [reading]
     raw_writer = Mock()
     raw_writer.write.side_effect = RuntimeError("minio down")
-    readings_writer = Mock()
 
-    job = _job(api_client=api_client, raw_writer=raw_writer, readings_writer=readings_writer)
+    job = _job(api_client=api_client, raw_writer=raw_writer)
     job.run()  # ne doit pas lever
-
-    readings_writer.insert.assert_not_called()
 
 
 def test_api_error_does_not_crash_and_writes_nothing():
@@ -178,3 +107,16 @@ def test_api_error_does_not_crash_and_writes_nothing():
     job.run()  # ne doit pas lever
 
     raw_writer.write.assert_not_called()
+
+
+def test_run_processes_all_readings_returned():
+    readings = [_reading(site_id=f"SITE00{i}") for i in range(1, 8)]
+    api_client = Mock()
+    api_client.get_readings.return_value = readings
+    raw_writer = Mock()
+    raw_writer.write.return_value = "x.json"
+
+    job = _job(api_client=api_client, raw_writer=raw_writer)
+    job.run()
+
+    assert raw_writer.write.call_count == 7
