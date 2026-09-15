@@ -1,10 +1,5 @@
-import {
-  MOCKED_SITE_IDS,
-  READINGS_ENDPOINT,
-  READINGS_LIMIT,
-} from "@/config/api";
+import { READINGS_ENDPOINT, READINGS_LIMIT } from "@/config/api";
 import { apiClient } from "@/lib/api/client";
-import { SITE001_MOCK_READINGS } from "@/lib/api/mock/site001-consumption";
 import type { ConsumptionReading, DataQuality } from "@/types/consumption";
 
 type ApiConsumptionReading = Omit<ConsumptionReading, "site_type" | "data_quality"> & {
@@ -24,13 +19,6 @@ function mapReading(raw: ApiConsumptionReading): ConsumptionReading {
 export async function getConsumptionReadings(
   siteId: string,
 ): Promise<ConsumptionReading[]> {
-  if (MOCKED_SITE_IDS.has(siteId)) {
-    if (siteId === "SITE001") {
-      return SITE001_MOCK_READINGS;
-    }
-    return [];
-  }
-
   const { data } = await apiClient.get<ApiConsumptionReading[]>(
     READINGS_ENDPOINT,
     {
