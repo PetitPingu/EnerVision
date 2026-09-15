@@ -2,7 +2,7 @@
 
 Adapte le client partagé `mockapi_client.MockApiClient` — seul module du
 monorepo autorisé à appeler `requests` vers l'API mock — au port
-SensorApiPort de core-api : ne lève jamais d'exception, les erreurs sont
+SensorApiPort de core_api : ne lève jamais d'exception, les erreurs sont
 loggées et une valeur par défaut est retournée à l'appelant.
 """
 
