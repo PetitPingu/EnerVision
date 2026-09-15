@@ -71,7 +71,7 @@ services:
     networks:
       - enervision-net
 
-  core-api:
+  core_api:
     build:
       # Contexte élargi à la racine du repo pour pouvoir copier packages/
       # (dépendance partagée mockapi-client) dans l'image.
@@ -92,9 +92,9 @@ services:
       - enervision-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.core-api.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.core-api.entrypoints=web"
-      - "traefik.http.services.core-api.loadbalancer.server.port=8000"
+      - "traefik.http.routers.core_api.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.core_api.entrypoints=web"
+      - "traefik.http.services.core_api.loadbalancer.server.port=8000"
 
   prediction:
     build:
@@ -121,12 +121,12 @@ services:
     networks:
       - enervision-net
 
-  etl-worker:
+  etl_worker:
     build:
       # Contexte élargi à la racine du repo pour pouvoir copier packages/
       # (dépendance partagée mockapi-client) dans l'image.
       context: .
-      dockerfile: apps/etl-worker/Dockerfile
+      dockerfile: apps/etl_worker/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MOCK_API_URL: ${MOCK_API_URL}

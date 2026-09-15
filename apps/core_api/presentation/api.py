@@ -1,4 +1,4 @@
-"""API core-api : relaie (proxy) l'API mock EnerVision.
+"""API core_api : relaie (proxy) l'API mock EnerVision.
 
 Couche présentation : traduit les requêtes HTTP en appels au port
 SensorApiPort et sérialise les entités du domaine en JSON. Ne contient
@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Query
 from infrastructure.api_client import ApiMockClient
 
 app = FastAPI(
-    title="EnerVision core-api",
+    title="EnerVision core_api",
     description="Relaie les endpoints de l'API mock EnerVision.",
     version="1.0.0",
 )

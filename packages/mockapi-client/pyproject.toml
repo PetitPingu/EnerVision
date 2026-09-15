@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mockapi-client"
 version = "0.1.0"
-description = "Client de lecture pour l'API Mock EnerVision, partagé entre core-api et etl-worker."
+description = "Client de lecture pour l'API Mock EnerVision, partagé entre core_api et etl_worker."
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31",
