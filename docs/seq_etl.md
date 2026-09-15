@@ -43,35 +43,42 @@ sequenceDiagram
     Note over Worker,Redis: Une lecture "critical" (tous les champs de mesure null)<br/>suit exactement le même chemin — jamais filtrée ni écartée
 ```
 
-### Transformation des données brutes (à venir)
+### Transformation horaire (bronze -> enervision.readings)
 
-Étape distincte, pas encore implémentée : contrairement au plan initial,
-l'ingestion (ci-dessus) écrit déjà directement dans `readings_raw` en
-même temps que le JSON brut dans `bronze` — il n'y a pas de job séparé
-qui relit MinIO pour peupler Postgres. Ce diagramme reste pertinent pour
-un futur retraitement/backfill (ex. DATA-04, imputation) qui relirait le
-bucket `bronze` indépendamment de l'ingestion temps réel.
+Second job APScheduler du même worker (cron, `minute=0`) : relit les
+JSON bruts de l'heure précédente dans le bucket bronze et les charge
+dans la table structurée `enervision.readings` (servie par core_api),
+indépendamment de l'ingestion temps réel qui alimente déjà `readings_raw`.
 
 #### Mermaid
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Cron as Scheduler (cron 1h)
+    participant Cron as APScheduler (cron, toutes les heures)
     participant Worker as Worker ETL
-    participant MinIO as MinIO (S3)
-    participant PG as PostgreSQL
- 
-    loop Toutes les heures
-        Cron->>Worker: Déclenche le job de transformation
-        Worker->>MinIO: GET bronze/{date}/*.json (données brutes en attente)
-        MinIO-->>Worker: Fichiers bruts
-        Worker->>Worker: Parsing / validation / transformation
-        alt Données valides
-            Worker->>PG: INSERT INTO readings
-            PG-->>Worker: OK
-        else Données invalides
+    participant Mock as API Mock EnerVision
+    participant MinIO as MinIO (bucket bronze)
+    participant PG as PostgreSQL (enervision)
+
+    Cron->>Worker: HourlyTransformationJob.run()
+    Worker->>Mock: GET /api/v1/sites
+    Mock-->>Worker: 200 OK + liste des sites
+    Worker->>PG: UPSERT enervision.sites (nécessaire : FK sur site_id)
+    PG-->>Worker: OK
+
+    Worker->>MinIO: GET bronze/{YYYY}/{MM}/{DD}/{HH-1}/*.json (heure précédente)
+    MinIO-->>Worker: Fichiers bruts
+
+    loop Pour chaque fichier
+        Worker->>Worker: Validation Pydantic (EnergyReading), aucune correction de valeur
+        alt JSON valide
+            Worker->>PG: INSERT enervision.readings ... ON CONFLICT (site_id, timestamp) DO NOTHING
+            PG-->>Worker: inséré / doublon
+        else JSON invalide
             Worker->>Worker: Log erreur + skip
         end
     end
+
+    Worker->>Worker: Log JSON stdout {job: transform, files, inserted, duplicates, errors}
 ```
