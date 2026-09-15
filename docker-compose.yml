@@ -76,7 +76,7 @@ services:
       # Contexte élargi à la racine du repo pour pouvoir copier packages/
       # (dépendance partagée mockapi-client) dans l'image.
       context: .
-      dockerfile: apps/core-api/Dockerfile
+      dockerfile: apps/core_api/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000

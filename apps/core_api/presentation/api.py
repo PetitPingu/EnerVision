@@ -4,7 +4,7 @@ Couche présentation : traduit les requêtes HTTP en appels au port
 SensorApiPort et sérialise les entités du domaine en JSON. Ne contient
 aucune logique métier.
 
-Lancer en local (depuis apps/core-api) :
+Lancer en local (depuis apps/core_api) :
     python -m uvicorn presentation.api:app --reload --port 8001
 
 Puis ouvrir http://127.0.0.1:8001/docs pour explorer les endpoints.
