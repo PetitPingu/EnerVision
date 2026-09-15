@@ -3,7 +3,7 @@ from unittest.mock import Mock
 from infrastructure.raw_writer import RawWriter
 
 
-def test_write_uses_year_month_day_hour_object_key_in_local_time():
+def test_write_uses_site_first_object_key_in_local_time():
     """2026-09-15T10:00 UTC -> 12:00 heure locale (Europe/Paris, CEST en été)."""
     client = Mock()
     writer = RawWriter(client=client, bucket="raw")
@@ -14,10 +14,10 @@ def test_write_uses_year_month_day_hour_object_key_in_local_time():
         raw_payload=b'{"site_id": "SITE001"}',
     )
 
-    assert object_key == "2026/09/15/12/001_00.json"
+    assert object_key == "SITE001/2026/09/15/12/00.json"
 
 
-def test_write_filename_uses_site_number_and_minutes():
+def test_write_filename_uses_minutes_only():
     client = Mock()
     writer = RawWriter(client=client, bucket="raw")
 
@@ -27,7 +27,7 @@ def test_write_filename_uses_site_number_and_minutes():
         raw_payload=b"{}",
     )
 
-    assert object_key == "2026/09/15/14/003_26.json"
+    assert object_key == "SITE003/2026/09/15/14/26.json"
 
 
 def test_write_puts_object_in_raw_bucket_with_raw_bytes():
@@ -57,7 +57,7 @@ def test_write_handles_timestamp_without_timezone():
         site_id="SITE003", timestamp="2026-01-05T03:20:00", raw_payload=b"{}"
     )
 
-    assert object_key == "2026/01/05/04/003_20.json"
+    assert object_key == "SITE003/2026/01/05/04/20.json"
 
 
 def test_write_overwrites_within_the_same_minute():
@@ -85,6 +85,20 @@ def test_write_does_not_collide_across_different_minutes():
     )
     second_key = writer.write(
         site_id="SITE001", timestamp="2026-09-15T10:01:00.000000", raw_payload=b"{}"
+    )
+
+    assert first_key != second_key
+
+
+def test_write_does_not_collide_across_different_sites():
+    client = Mock()
+    writer = RawWriter(client=client, bucket="raw")
+
+    first_key = writer.write(
+        site_id="SITE001", timestamp="2026-09-15T10:00:00.000000", raw_payload=b"{}"
+    )
+    second_key = writer.write(
+        site_id="SITE002", timestamp="2026-09-15T10:00:00.000000", raw_payload=b"{}"
     )
 
     assert first_key != second_key

@@ -1,12 +1,15 @@
 """Écrit le JSON brut de chaque lecture dans le bucket raw.
 
-Chemin objet : {YYYY}/{MM}/{DD}/{HH}/{numéro_site}_{MM_minutes}.json —
-partitionnement par heure (convention Hive, courante pour un data lake :
-liste/filtre efficace par période). Le nom de fichier ne garde que le
-numéro du site et les minutes : plus compact, mais moins unique que
-l'horodatage complet — deux écritures du même site dans la même minute
-s'écraseraient (peu probable au rythme d'un cycle par minute, mais
-possible si le worker redémarre au mauvais moment).
+Chemin objet : {site_id}/{YYYY}/{MM}/{DD}/{HH}/{MM_minutes}.json —
+partitionné par site d'abord, puis par heure (convention Hive). Adapté à
+un usage "historique par site" (creuser un incident sur un site donné) ;
+le bucket sert d'archive brute, il n'est pas relu automatiquement par le
+worker (l'insertion en base se fait depuis la lecture déjà en mémoire).
+
+Le nom de fichier ne garde que les minutes : plus compact, mais moins
+unique que l'horodatage complet — deux écritures du même site dans la
+même minute s'écraseraient (peu probable au rythme d'un cycle par
+minute, mais possible si le worker redémarre au mauvais moment).
 
 L'arborescence utilise l'heure locale (Europe/Paris, DST géré
 automatiquement), fixée explicitement plutôt que de dépendre du fuseau
@@ -14,7 +17,6 @@ système : un conteneur Docker est en UTC par défaut, quel que soit le
 fuseau de la machine hôte.
 """
 
-import re
 from datetime import datetime, timezone
 from io import BytesIO
 from zoneinfo import ZoneInfo
@@ -41,8 +43,7 @@ class RawWriter:
     def write(self, site_id: str, timestamp: str, raw_payload: bytes) -> str:
         """Écrit raw_payload dans le bucket raw et retourne la clé de l'objet."""
         moment = self._parse_timestamp(timestamp).astimezone(LOCAL_TZ)
-        site_number = self._site_number(site_id)
-        object_key = f"{moment:%Y/%m/%d/%H}/{site_number}_{moment:%M}.json"
+        object_key = f"{site_id}/{moment:%Y/%m/%d/%H}/{moment:%M}.json"
         self._client.put_object(
             self._bucket,
             object_key,
@@ -58,9 +59,3 @@ class RawWriter:
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
         return moment
-
-    @staticmethod
-    def _site_number(site_id: str) -> str:
-        """Extrait le numéro du site (ex: "SITE001" -> "001")."""
-        match = re.search(r"\d+", site_id)
-        return match.group() if match else site_id
