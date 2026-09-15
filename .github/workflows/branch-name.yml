@@ -13,23 +13,30 @@ on:
       - edited
 
 jobs:
-  validate-branch-name:
-    name: Validate branch name
+  validate-conventions:
+    name: Validate branch and PR conventions
     runs-on: ubuntu-latest
 
     steps:
       - name: Check branch name
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PUSH_REF_NAME: ${{ github.ref_name }}
         run: |
-          BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            BRANCH_NAME="${PR_HEAD_REF}"
+          else
+            BRANCH_NAME="${PUSH_REF_NAME}"
+          fi
+
+          if [[ -z "${BRANCH_NAME}" ]]; then
+            echo "::error::Impossible de déterminer le nom de la branche."
+            exit 1
+          fi
 
           echo "Branche à valider : ${BRANCH_NAME}"
-
-          # Branches protégées / outils (pas de préfixe conventional commit)
-          if [[ "${BRANCH_NAME}" =~ ^(main|dev)$ ]]; then
-            echo "Branche principale autorisée."
-            exit 0
-          fi
 
           if [[ "${BRANCH_NAME}" =~ ^dependabot/ ]]; then
             echo "Branche Dependabot autorisée."
@@ -37,10 +44,9 @@ jobs:
           fi
 
           # Conventional Commits : <type>/<description> ou <type>/<scope>/<description>
-          # Types : feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-          PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([a-z0-9._-]*[a-z0-9]+)?(/[a-z0-9]+([a-z0-9._-]*[a-z0-9]+)?)*$'
+          BRANCH_PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([a-z0-9._-]*[a-z0-9]+)?(/[a-z0-9]+([a-z0-9._-]*[a-z0-9]+)?)*$'
 
-          if [[ "${BRANCH_NAME}" =~ ${PATTERN} ]]; then
+          if [[ "${BRANCH_NAME}" =~ ${BRANCH_PATTERN} ]]; then
             echo "Nom de branche conforme aux conventions Conventional Commits."
             exit 0
           fi
@@ -55,4 +61,32 @@ jobs:
           echo "  fix/dashboard-login-error"
           echo "  chore/update-dependencies"
           echo "  docs/architecture-diagrams"
+          exit 1
+
+      - name: Check PR title
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Titre de PR à valider : ${PR_TITLE}"
+
+          # Conventional Commits : <type>: <description> ou <type>(<scope>): <description>
+          TITLE_PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+'
+
+          if [[ "${PR_TITLE}" =~ ${TITLE_PATTERN} ]]; then
+            echo "Titre de PR conforme aux conventions Conventional Commits."
+            exit 0
+          fi
+
+          echo "::error::Titre de PR invalide : '${PR_TITLE}'"
+          echo ""
+          echo "Format attendu : <type>: <description> ou <type>(<scope>): <description>"
+          echo "Types autorisés : feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+          echo ""
+          echo "Exemples valides :"
+          echo "  feat: ajouter l'authentification utilisateur"
+          echo "  fix(dashboard): corriger l'erreur de connexion"
+          echo "  chore: mettre à jour les dépendances"
+          echo "  docs: ajouter les diagrammes d'architecture"
           exit 1
