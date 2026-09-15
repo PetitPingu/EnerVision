@@ -1,4 +1,4 @@
-"""Configuration du worker d'ingestion (issue #19).
+"""Configuration du worker d'ingestion.
 
 Toutes les valeurs peuvent être surchargées par des variables
 d'environnement (fichier .env), pour ne pas coder en dur les adresses des
@@ -22,9 +22,7 @@ class Config:
     MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
     MINIO_ACCESS_KEY = os.environ.get("MINIO_ROOT_USER", "enervision")
     MINIO_SECRET_KEY = os.environ.get("MINIO_ROOT_PASSWORD", "changeme123")
-    MINIO_BRONZE_BUCKET = os.environ.get("MINIO_BRONZE_BUCKET", "bronze")
+    MINIO_RAW_BUCKET = os.environ.get("MINIO_RAW_BUCKET", "raw")
     MINIO_SECURE = os.environ.get("MINIO_SECURE", "false").lower() == "true"
-
-    REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
     POLL_INTERVAL_SECONDS = int(os.environ.get("ETL_POLL_INTERVAL_SECONDS", "60"))

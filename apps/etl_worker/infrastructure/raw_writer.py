@@ -1,11 +1,8 @@
-"""Écrit le JSON brut horodaté de chaque lecture dans le bucket bronze.
+"""Écrit le JSON brut de chaque lecture dans le bucket raw.
 
-Chemin objet : YYYY/MM/DD/HH/{site_id}_{timestamp}.json. L'horodatage du
-chemin et du nom de fichier vient de la lecture elle-même
-(EnergyReading.timestamp), pas de l'heure d'ingestion, pour rester
-traçable même si le worker prend du retard. Le contenu écrit est
-raw_payload (octets bruts de la réponse API), jamais reconstruit depuis
-l'objet Pydantic (voir DATA-02 / issue #16).
+Chemin objet : {date}/{site_id}.json — conforme au diagramme d'ingestion
+(docs/seq_etl.md) : un fichier par site et par jour, écrasé à chaque
+nouvelle lecture du jour.
 """
 
 from datetime import datetime, timezone
@@ -16,8 +13,8 @@ from minio import Minio
 from .config import Config
 
 
-class BronzeWriter:
-    """Dépose les lectures brutes dans le bucket bronze de MinIO."""
+class RawWriter:
+    """Dépose les lectures brutes dans le bucket raw de MinIO."""
 
     def __init__(self, client: Minio | None = None, bucket: str | None = None):
         self._client = client or Minio(
@@ -26,12 +23,12 @@ class BronzeWriter:
             secret_key=Config.MINIO_SECRET_KEY,
             secure=Config.MINIO_SECURE,
         )
-        self._bucket = bucket or Config.MINIO_BRONZE_BUCKET
+        self._bucket = bucket or Config.MINIO_RAW_BUCKET
 
     def write(self, site_id: str, timestamp: str, raw_payload: bytes) -> str:
-        """Écrit raw_payload dans le bucket bronze et retourne la clé de l'objet."""
+        """Écrit raw_payload dans le bucket raw et retourne la clé de l'objet."""
         moment = self._parse_timestamp(timestamp)
-        object_key = f"{moment:%Y/%m/%d/%H}/{site_id}_{moment:%Y%m%dT%H%M%S%f}.json"
+        object_key = f"{moment:%Y-%m-%d}/{site_id}.json"
         self._client.put_object(
             self._bucket,
             object_key,

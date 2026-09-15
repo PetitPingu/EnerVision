@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from infrastructure.readings_writer import ReadingsWriter
+from infrastructure.consumption_readings_writer import ConsumptionReadingsWriter
 from mockapi_client import EnergyReading
 
 
@@ -32,16 +32,18 @@ def _mock_connect(rowcount: int):
     return conn, cursor
 
 
-def test_insert_targets_enervision_readings_with_on_conflict_do_nothing():
+def test_insert_targets_consumption_readings_with_on_conflict_do_nothing():
     conn, cursor = _mock_connect(rowcount=1)
 
-    with patch("infrastructure.readings_writer.psycopg2.connect", return_value=conn):
-        writer = ReadingsWriter(dsn="postgresql://fake")
+    with patch(
+        "infrastructure.consumption_readings_writer.psycopg2.connect", return_value=conn
+    ):
+        writer = ConsumptionReadingsWriter(dsn="postgresql://fake")
         inserted = writer.insert(_reading())
 
     assert inserted is True
     sql = cursor.execute.call_args[0][0]
-    assert "enervision.readings" in sql
+    assert "consumption_readings" in sql
     assert "ON CONFLICT" in sql and "DO NOTHING" in sql
     conn.close.assert_called_once()
 
@@ -49,8 +51,10 @@ def test_insert_targets_enervision_readings_with_on_conflict_do_nothing():
 def test_insert_returns_false_on_conflict():
     conn, _ = _mock_connect(rowcount=0)
 
-    with patch("infrastructure.readings_writer.psycopg2.connect", return_value=conn):
-        writer = ReadingsWriter(dsn="postgresql://fake")
+    with patch(
+        "infrastructure.consumption_readings_writer.psycopg2.connect", return_value=conn
+    ):
+        writer = ConsumptionReadingsWriter(dsn="postgresql://fake")
         inserted = writer.insert(_reading())
 
     assert inserted is False

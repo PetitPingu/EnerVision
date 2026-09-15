@@ -1,17 +1,16 @@
-"""Relit les JSON bruts précédemment déposés dans le bucket bronze par le
-worker d'ingestion (voir minio_writer.py), pour le job de transformation
-horaire.
+"""Relit les JSON bruts déposés dans le bucket raw pour le job de
+transformation (docs/seq_etl.md).
 """
 
-from datetime import datetime
+from datetime import date
 
 from minio import Minio
 
 from .config import Config
 
 
-class BronzeReader:
-    """Liste et lit les objets du bucket bronze pour une heure donnée."""
+class RawReader:
+    """Liste et lit les objets du bucket raw pour une date donnée."""
 
     def __init__(self, client: Minio | None = None, bucket: str | None = None):
         self._client = client or Minio(
@@ -20,11 +19,11 @@ class BronzeReader:
             secret_key=Config.MINIO_SECRET_KEY,
             secure=Config.MINIO_SECURE,
         )
-        self._bucket = bucket or Config.MINIO_BRONZE_BUCKET
+        self._bucket = bucket or Config.MINIO_RAW_BUCKET
 
-    def read_hour(self, moment: datetime) -> list[bytes]:
-        """Retourne le contenu brut de tous les objets déposés durant l'heure de `moment`."""
-        prefix = f"{moment:%Y/%m/%d/%H}/"
+    def read_date(self, day: date) -> list[bytes]:
+        """Retourne le contenu brut de tous les objets déposés pour cette date."""
+        prefix = f"{day:%Y-%m-%d}/"
         payloads = []
         for obj in self._client.list_objects(self._bucket, prefix=prefix, recursive=True):
             response = self._client.get_object(self._bucket, obj.object_name)

@@ -1,13 +1,11 @@
-"""Point d'entrée du worker d'ingestion (issue #19).
+"""Point d'entrée du worker ETL (docs/seq_etl.md).
 
 Deux jobs planifiés (APScheduler) :
-- Ingestion temps réel, toutes les ETL_POLL_INTERVAL_SECONDS secondes :
-  interroge l'API mock pour tous les sites et alimente readings_raw
-  (Postgres), le bucket bronze (MinIO) et le flux Redis reading.ingested.
-- Transformation horaire (architecture d'origine, voir docs/seq_etl.md) :
-  relit les JSON bruts de l'heure précédente dans bronze, les valide et
-  les charge dans enervision.readings (table structurée servie par
-  core_api).
+- Ingestion, toutes les ETL_POLL_INTERVAL_SECONDS secondes : récupère les
+  dernières lectures (GET /api/v1/readings) et les dépose brutes dans le
+  bucket raw de MinIO.
+- Transformation, toutes les heures : relit le bucket raw pour la date du
+  jour, valide chaque JSON et le charge dans consumption_readings.
 """
 
 import logging
@@ -15,7 +13,7 @@ from datetime import datetime
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from application.ingest_site import SiteIngestor
+from application.ingest_readings import ReadingsIngestor
 from application.transform_readings import HourlyTransformationJob
 from infrastructure.config import Config
 
@@ -23,12 +21,12 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
 def main() -> None:
-    ingestor = SiteIngestor()
+    ingestor = ReadingsIngestor(window_seconds=Config.POLL_INTERVAL_SECONDS)
     transformation_job = HourlyTransformationJob()
 
     scheduler = BlockingScheduler()
     scheduler.add_job(
-        ingestor.ingest_all_sites,
+        ingestor.run,
         "interval",
         seconds=Config.POLL_INTERVAL_SECONDS,
         next_run_time=datetime.now(),

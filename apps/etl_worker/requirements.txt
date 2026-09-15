@@ -6,4 +6,3 @@ python-dotenv>=1.0
 APScheduler>=3.10
 psycopg2-binary>=2.9
 minio>=7.2
-redis>=5.0

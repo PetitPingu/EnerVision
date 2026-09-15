@@ -1,18 +1,19 @@
 ## 2. Schéma de la base de données postgres
 
 Les tables ci-dessous existent réellement (schéma `enervision`, créées via
-Alembic pour `sites`/`readings`/`alerts` et via `db/init/002-readings-raw.sql`
-pour `readings_raw`) : clé naturelle `site_id` (text, l'identifiant renvoyé
-par l'API mock, ex. `SITE001`), pas d'UUID — plus simple à corréler
-directement avec les payloads de l'API et les objets MinIO sans jointure
-supplémentaire. `USERS`, `PREDICTIONS` et `RECOMMENDATIONS` restent des
-propositions non implémentées, à confirmer avec l'équipe.
+Alembic pour `sites`/`readings`/`alerts` et via
+`db/init/002-consumption-readings.sql` pour `consumption_readings`) :
+clé naturelle `site_id` (text, l'identifiant renvoyé par l'API mock, ex.
+`SITE001`), pas d'UUID — plus simple à corréler directement avec les
+payloads de l'API et les objets MinIO sans jointure supplémentaire.
+`USERS`, `PREDICTIONS` et `RECOMMENDATIONS` restent des propositions non
+implémentées, à confirmer avec l'équipe.
 
 SITES — les entités métier de base, telles que renvoyées par l'API mock : nom, type, capacité, localisation, statut.
 
-READINGS_RAW — table d'atterrissage du Worker ETL (issue #19) : une ligne par lecture réellement ingérée, clé primaire naturelle `(site_id, timestamp)` qui porte l'idempotence (`ON CONFLICT DO NOTHING`). C'est une hypertable TimescaleDB. Aucune donnée n'y est corrigée ou filtrée — y compris les lectures `critical` (tous les champs de mesure `null`).
+CONSUMPTION_READINGS — table alimentée par le job de transformation horaire du Worker ETL (issue #19, voir [seq_etl.md](seq_etl.md)) : une ligne par lecture transformée depuis le bucket MinIO `raw`, clé primaire naturelle `(site_id, timestamp)` qui porte l'idempotence (`ON CONFLICT DO NOTHING`). C'est une hypertable TimescaleDB. Aucune donnée n'y est corrigée ou filtrée — y compris les lectures `critical` (tous les champs de mesure `null`). Pas de clé étrangère vers SITES (site_id est un simple champ texte, non contraint).
 
-READINGS — vue structurée/nettoyée destinée à être servie par core_api (alimentation depuis READINGS_RAW à définir, hors périmètre de l'issue #19). Même forme que READINGS_RAW, clé étrangère vers SITES.
+READINGS — table structurée destinée à être servie par core_api (alimentation à définir, hors périmètre de l'issue #19). Même forme que CONSUMPTION_READINGS, mais avec clé étrangère vers SITES.
 
 ALERTS — alertes de consommation relayées depuis l'API mock (voir `GET /api/v1/alerts`), rattachées à un site.
 
@@ -44,8 +45,8 @@ erDiagram
         varchar status
     }
 
-    READINGS_RAW {
-        varchar site_id PK
+    CONSUMPTION_READINGS {
+        varchar site_id PK "pas de FK vers SITES"
         timestamptz timestamp PK
         varchar site_type
         float consumption_kw "nullable"

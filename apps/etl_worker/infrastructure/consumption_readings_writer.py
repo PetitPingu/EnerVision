@@ -1,8 +1,8 @@
-"""Insère les lectures dans readings_raw.
+"""Insère les lectures transformées dans consumption_readings.
 
-L'idempotence repose sur la contrainte d'unicité (site_id, timestamp) de la
-table (voir db/init/002-readings-raw.sql) : un ON CONFLICT DO NOTHING
-garantit qu'un redémarrage du worker ne crée jamais de doublon.
+Idempotence via la contrainte (site_id, timestamp) : un ON CONFLICT DO
+NOTHING garantit qu'une ré-exécution du job de transformation ne crée
+jamais de doublon.
 """
 
 import psycopg2
@@ -11,7 +11,7 @@ from mockapi_client import EnergyReading
 from .config import Config
 
 _INSERT_SQL = """
-    INSERT INTO readings_raw (
+    INSERT INTO consumption_readings (
         site_id, "timestamp", site_type, consumption_kw, consumption_kwh,
         voltage_v, current_a, power_factor, temperature_celsius,
         humidity_percent, null_reasons, data_quality
@@ -21,8 +21,8 @@ _INSERT_SQL = """
 """
 
 
-class ReadingsRawWriter:
-    """Écrit une EnergyReading dans readings_raw, de façon idempotente."""
+class ConsumptionReadingsWriter:
+    """Écrit une EnergyReading dans consumption_readings, de façon idempotente."""
 
     def __init__(self, dsn: str | None = None):
         self._dsn = dsn or Config.DATABASE_URL

@@ -1,9 +1,9 @@
--- Table d'atterrissage des lectures brutes ingérées par le worker ETL
--- (issue #19). La clé primaire (site_id, timestamp) porte l'idempotence :
--- un INSERT ... ON CONFLICT (site_id, timestamp) DO NOTHING ne crée jamais
--- de doublon, y compris après redémarrage du worker.
+-- Table d'atterrissage des lectures transformées par le worker ETL
+-- (voir docs/seq_etl.md). La clé primaire (site_id, timestamp) porte
+-- l'idempotence : un INSERT ... ON CONFLICT (site_id, timestamp) DO
+-- NOTHING ne crée jamais de doublon, y compris après redémarrage.
 
-CREATE TABLE IF NOT EXISTS readings_raw (
+CREATE TABLE IF NOT EXISTS consumption_readings (
     site_id TEXT NOT NULL,
     "timestamp" TIMESTAMPTZ NOT NULL,
     site_type TEXT NOT NULL,
@@ -20,4 +20,4 @@ CREATE TABLE IF NOT EXISTS readings_raw (
     PRIMARY KEY (site_id, "timestamp")
 );
 
-SELECT create_hypertable('readings_raw', 'timestamp', if_not_exists => TRUE);
+SELECT create_hypertable('consumption_readings', 'timestamp', if_not_exists => TRUE);

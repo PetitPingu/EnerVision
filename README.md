@@ -7,5 +7,5 @@ Le détail du socle de stockage (TimescaleDB + MinIO) est décrit dans
 
 ## Ingestion temps réel
 
-Le worker de polling des sites (readings_raw + bucket bronze + Redis
-Streams) est décrit dans [docs/ingestion-worker.md](docs/ingestion-worker.md).
+Le worker de polling des sites (bucket raw + consumption_readings)
+est décrit dans [docs/ingestion-worker.md](docs/ingestion-worker.md).

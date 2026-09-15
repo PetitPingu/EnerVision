@@ -1,11 +1,11 @@
 from unittest.mock import Mock
 
-from infrastructure.minio_writer import BronzeWriter
+from infrastructure.raw_writer import RawWriter
 
 
-def test_write_uses_year_month_day_hour_object_key():
+def test_write_uses_date_site_id_object_key():
     client = Mock()
-    writer = BronzeWriter(client=client, bucket="bronze")
+    writer = RawWriter(client=client, bucket="raw")
 
     object_key = writer.write(
         site_id="SITE001",
@@ -13,13 +13,12 @@ def test_write_uses_year_month_day_hour_object_key():
         raw_payload=b'{"site_id": "SITE001"}',
     )
 
-    assert object_key.startswith("2026/09/15/10/SITE001_20260915T100013879434")
-    assert object_key.endswith(".json")
+    assert object_key == "2026-09-15/SITE001.json"
 
 
-def test_write_puts_object_in_bronze_bucket_with_raw_bytes():
+def test_write_puts_object_in_raw_bucket_with_raw_bytes():
     client = Mock()
-    writer = BronzeWriter(client=client, bucket="bronze")
+    writer = RawWriter(client=client, bucket="raw")
     raw_payload = b'{"site_id": "SITE001", "data_quality": "good"}'
 
     object_key = writer.write(
@@ -28,7 +27,7 @@ def test_write_puts_object_in_bronze_bucket_with_raw_bytes():
 
     client.put_object.assert_called_once()
     args, kwargs = client.put_object.call_args
-    assert args[0] == "bronze"
+    assert args[0] == "raw"
     assert args[1] == object_key
     assert kwargs["length"] == len(raw_payload)
     assert kwargs["content_type"] == "application/json"
@@ -37,10 +36,10 @@ def test_write_puts_object_in_bronze_bucket_with_raw_bytes():
 
 def test_write_handles_timestamp_without_timezone():
     client = Mock()
-    writer = BronzeWriter(client=client, bucket="bronze")
+    writer = RawWriter(client=client, bucket="raw")
 
     object_key = writer.write(
         site_id="SITE003", timestamp="2026-01-05T03:20:00", raw_payload=b"{}"
     )
 
-    assert object_key.startswith("2026/01/05/03/SITE003_")
+    assert object_key == "2026-01-05/SITE003.json"

@@ -1,36 +1,38 @@
-# Worker d'ingestion temps réel (issue #19)
+# Worker ETL (issue #19)
 
-Le worker `etl_worker` interroge l'API mock EnerVision toutes les 60
-secondes pour tous les sites, et alimente en continu trois destinations
-sans jamais perdre ni dupliquer une lecture :
+Le worker `etl_worker` implémente les deux étages prévus dans
+[docs/seq_etl.md](seq_etl.md), sur des scheduler internes (APScheduler,
+pas de cron externe) :
 
-1. **`readings_raw`** (Postgres/TimescaleDB) — la donnée structurée.
-2. **Bucket MinIO `bronze`** — le JSON brut de chaque lecture, tel que
-   reçu de l'API, horodaté (`bronze/YYYY/MM/DD/HH/{site_id}_{timestamp}.json`).
-3. **Redis Streams (`reading.ingested`)** — un événement par lecture
-   *nouvellement* insérée (pas de republication sur doublon), consommé
-   plus tard par le service d'alerting.
+1. **Ingestion** (toutes les 60 secondes) : un seul appel
+   `GET /api/v1/readings?limit=7` (les dernières lectures, une par site),
+   écrites telles quelles dans le bucket MinIO `raw`
+   (`raw/{date}/{site_id}.json` — un fichier par site et par jour,
+   écrasé à chaque nouvelle lecture).
+2. **Transformation** (toutes les heures) : relit tous les fichiers du
+   jour dans `raw`, les valide (mêmes modèles Pydantic que l'ingestion),
+   et les charge dans `consumption_readings` (Postgres/TimescaleDB).
 
-Une lecture `critical` (tous les capteurs en panne, tout est `null`) est
-stockée comme n'importe quelle autre — rien n'est filtré ni corrigé (voir
-[DATA-02 / issue #16](../packages/mockapi-client) pour cet invariant
-lecture-seule).
+Une lecture `critical` (tous les capteurs en panne, tout est `null`) suit
+exactement le même chemin — rien n'est filtré ni corrigé à aucune étape
+(voir [DATA-02 / issue #16](../packages/mockapi-client) pour cet
+invariant lecture-seule).
 
 ## Démarrer l'infra nécessaire
 
 Pas besoin de `core_api`/`prediction`/etc. pour ce worker :
 
 ```bash
-docker compose up -d postgres minio minio-init redis
+docker compose up -d postgres minio minio-init
 ```
 
 Si Postgres avait déjà été démarré **avant** ce ticket, la table
-`readings_raw` n'existe pas encore (les scripts de `db/init/` ne
+`consumption_readings` n'existe pas encore (les scripts de `db/init/` ne
 s'exécutent qu'une fois, sur un volume vide) :
 
 ```bash
 docker compose down -v
-docker compose up -d postgres minio minio-init redis
+docker compose up -d postgres minio minio-init
 ```
 
 ## Lancer le worker en local
@@ -42,15 +44,17 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 python main.py
 ```
 
-Une ligne de log JSON s'affiche par site à chaque cycle :
+Le job d'ingestion logge une ligne JSON par site à chaque cycle :
 
 ```json
-{"site": "SITE001", "status": "inserted", "data_quality": "good", "object_key": "2026/09/15/12/SITE001_20260915T124828887095.json"}
+{"site": "SITE001", "status": "written", "data_quality": "good", "object_key": "2026-09-15/SITE001.json"}
 ```
 
-`status` vaut `"duplicate"` si la ligne existait déjà (idempotence), ou
-`"error"` si l'API mock ou l'infra était indisponible à ce cycle-là (le
-worker continue, il ne plante jamais sur une erreur ponctuelle).
+Le job de transformation logge un résumé par heure :
+
+```json
+{"job": "transform", "date": "2026-09-15", "files": 7, "inserted": 7, "duplicates": 0, "errors": 0}
+```
 
 ## Lancer les tests unitaires
 
@@ -63,21 +67,14 @@ python -m pytest -v
 > dossier `Scripts`/`bin` de ton interpréteur n'est pas sur le PATH —
 > `python -m pytest` fonctionne toujours.
 
-## Vérifier les critères d'acceptation
+## Vérifier
 
-| Critère | Comment vérifier |
+| Point | Comment vérifier |
 |---|---|
-| ≈ 70 lignes après 10 min (7 sites × 10 cycles) | `docker compose exec postgres psql -U enervision -d enervision -c "SELECT count(*) FROM readings_raw;"` |
-| Une lecture `critical` est stockée, pas ignorée | `docker compose exec postgres psql -U enervision -d enervision -c "SELECT site_id, timestamp FROM readings_raw WHERE data_quality = 'critical' LIMIT 5;"` (aléatoire côté API mock, peut prendre plusieurs minutes à apparaître) |
-| Redémarrer ne crée aucun doublon | Noter le `count(*)`, `docker compose restart etl_worker`, laisser tourner un cycle, recompter : ne doit ni reculer ni sauter anormalement |
-| Objets JSON visibles dans MinIO | Console web http://localhost:9001 (identifiants dans `.env`) → bucket `bronze` |
-
-Le nombre de lignes Postgres et le nombre d'événements Redis doivent
-toujours être égaux :
-
-```bash
-docker compose exec redis redis-cli XLEN reading.ingested
-```
+| 7 objets JSON dans `raw` (un par site, écrasés à chaque cycle) | Console web http://localhost:9001 (identifiants dans `.env`) → bucket `raw` |
+| Transformation chargée dans Postgres | `docker compose exec postgres psql -U enervision -d enervision -c "SELECT count(*) FROM consumption_readings;"` |
+| Une lecture `critical` est stockée, pas ignorée | `... WHERE data_quality = 'critical'` (aléatoire côté API mock, peut prendre plusieurs minutes à apparaître) |
+| Rejouer la transformation ne crée aucun doublon | Relancer le job (attendre l'heure suivante, ou l'appeler manuellement), recompter : ne doit pas augmenter |
 
 ## Dépannage rapide
 
