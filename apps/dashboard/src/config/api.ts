@@ -1,5 +1,4 @@
-/** Sites pour lesquels on utilise encore les données mockées locales. */
-export const MOCKED_SITE_IDS = new Set(["SITE001"]);
+export const SITES_ENDPOINT = "/api/v1/sites";
 
 export const READINGS_ENDPOINT = "/api/v1/readings";
 

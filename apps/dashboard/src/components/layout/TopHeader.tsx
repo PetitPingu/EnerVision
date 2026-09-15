@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { EnerVisionLogo } from "@/components/layout/EnerVisionLogo";
+import { SiteSelect } from "@/components/layout/SiteSelect";
 import { NAV_ITEMS } from "@/config/navigation";
 import { MOCK_USER } from "@/config/user";
 
@@ -83,9 +84,10 @@ export function TopHeader() {
     <header
       className="flex shrink-0 items-center justify-between border-b border-zinc-200/80 bg-zinc-50 px-6 py-4 lg:px-10"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <EnerVisionLogo size="sm" />
         <h1 className="text-lg font-semibold text-zinc-900">{pageTitle}</h1>
+        <SiteSelect />
       </div>
 
       <div className="flex items-center gap-3">
