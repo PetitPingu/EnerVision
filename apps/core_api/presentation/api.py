@@ -4,7 +4,7 @@ Couche présentation : traduit les requêtes HTTP en appels au port
 SensorApiPort et sérialise les entités du domaine en JSON. Ne contient
 aucune logique métier.
 
-Lancer en local (depuis apps/core-api) :
+Lancer en local (depuis apps/core_api) :
     python -m uvicorn presentation.api:app --reload --port 8001
 
 Puis ouvrir http://127.0.0.1:8001/docs pour explorer les endpoints.
@@ -12,7 +12,7 @@ Puis ouvrir http://127.0.0.1:8001/docs pour explorer les endpoints.
 
 from dataclasses import asdict
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from infrastructure.api_client import ApiMockClient
 
 app = FastAPI(
@@ -32,7 +32,10 @@ def root() -> dict:
             "/docs",
             "/health",
             "/api/v1/sites",
+            "/api/v1/sites/{site_id}/current",
             "/api/v1/readings",
+            "/api/v1/alerts",
+            "/api/v1/sensors/status",
         ]
     }
 
@@ -46,6 +49,17 @@ def health() -> dict:
 def list_sites() -> list:
     """Relaie la liste des sites depuis l'API mock."""
     return [asdict(site) for site in sensor_api.get_sites()]
+
+
+@app.get(
+    "/api/v1/sites/{site_id}/current", tags=["Readings"], summary="Lecture temps réel d'un site"
+)
+def get_current_reading(site_id: str) -> dict:
+    """Relaie la mesure instantanée d'un site depuis l'API mock."""
+    reading = sensor_api.get_current_reading(site_id)
+    if reading is None:
+        raise HTTPException(status_code=404, detail=f"Aucune lecture disponible pour {site_id}")
+    return asdict(reading)
 
 
 @app.get("/api/v1/readings", tags=["Readings"], summary="Historique des lectures")
@@ -68,3 +82,21 @@ def list_readings(
         site_id=site_id, start_time=start_time, end_time=end_time, limit=limit
     )
     return [asdict(r) for r in readings]
+
+
+@app.get("/api/v1/alerts", tags=["Alerts"], summary="Alertes actives")
+def list_alerts(
+    site_id: str | None = Query(None, description="Filtrer par site"),
+    severity: str | None = Query(
+        None, description="Filtrer par sévérité : low | medium | high | critical"
+    ),
+) -> list:
+    """Relaie les alertes de consommation actives depuis l'API mock."""
+    alerts = sensor_api.get_alerts(site_id=site_id, severity=severity)
+    return [asdict(a) for a in alerts]
+
+
+@app.get("/api/v1/sensors/status", tags=["Sensors"], summary="État des capteurs par site")
+def sensors_status() -> dict:
+    """Relaie l'état de santé des capteurs par site depuis l'API mock."""
+    return sensor_api.get_sensors_status()
