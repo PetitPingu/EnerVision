@@ -32,7 +32,7 @@ services:
 
   core-api:
     build:
-      context: ./services/core-api
+      context: ./apps/core-api
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000
@@ -54,7 +54,7 @@ services:
 
   prediction:
     build:
-      context: ./services/prediction
+      context: ./apps/prediction
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     depends_on:
@@ -65,7 +65,7 @@ services:
 
   recommendation:
     build:
-      context: ./services/recommendation
+      context: ./apps/recommendation
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000
@@ -77,9 +77,9 @@ services:
     networks:
       - enervision-net
 
-  worker-etl:
+  etl-worker:
     build:
-      context: ./services/worker-etl
+      context: ./apps/etl-worker
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MOCK_API_URL: ${MOCK_API_URL}
