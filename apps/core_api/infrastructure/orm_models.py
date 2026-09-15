@@ -2,7 +2,9 @@
 
 Distincts des dataclasses de domain/entities.py : le domaine reste pur, ces
 classes ne sont utilisées que par la couche infrastructure (accès DB).
-Tables créées dans le schéma `enervision` (voir db/init/001-init-timescaledb.sql).
+Tables créées dans le schéma `enervision` (voir la migration Alembic
+0d230748d8a2_bootstrap_extension_and_schema, qui crée l'extension
+timescaledb et le schéma avant tout le reste).
 """
 
 from datetime import datetime
