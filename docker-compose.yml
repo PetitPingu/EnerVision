@@ -73,7 +73,10 @@ services:
 
   core-api:
     build:
-      context: ./apps/core-api
+      # Contexte élargi à la racine du repo pour pouvoir copier packages/
+      # (dépendance partagée mockapi-client) dans l'image.
+      context: .
+      dockerfile: apps/core-api/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000
@@ -120,7 +123,10 @@ services:
 
   etl-worker:
     build:
-      context: ./apps/etl-worker
+      # Contexte élargi à la racine du repo pour pouvoir copier packages/
+      # (dépendance partagée mockapi-client) dans l'image.
+      context: .
+      dockerfile: apps/etl-worker/Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       MOCK_API_URL: ${MOCK_API_URL}

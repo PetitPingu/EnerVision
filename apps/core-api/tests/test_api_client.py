@@ -1,112 +1,141 @@
 from unittest.mock import Mock, patch
 
-import requests
 from domain.entities import Reading, Site
 from infrastructure.api_client import ApiMockClient
+from mockapi_client import EnergyReading, MockApiConnectionError, MockApiHTTPError, MockApiTimeoutError
+from mockapi_client import Site as MockSite
 
 
-def _mock_response(json_data, status_code=200):
-    mock = Mock()
-    mock.status_code = status_code
-    mock.json.return_value = json_data
-    if status_code >= 400:
-        mock.raise_for_status.side_effect = requests.exceptions.HTTPError(f"{status_code} error")
-    else:
-        mock.raise_for_status.return_value = None
-    return mock
+def _make_client(mock_inner: Mock) -> ApiMockClient:
+    with patch("infrastructure.api_client.MockApiClient", return_value=mock_inner):
+        return ApiMockClient(base_url="http://fake:8000")
+
+
+def _mock_site(site_id="SITE001", **overrides) -> MockSite:
+    data = {
+        "site_id": site_id,
+        "site_type": "office",
+        "site_name": "Bureau Paris",
+        "location": "Paris, France",
+        "capacity_kw": 200.0,
+        "status": "active",
+        **overrides,
+    }
+    return MockSite(**data)
+
+
+def _mock_reading(site_id="SITE001", **overrides) -> EnergyReading:
+    data = {
+        "timestamp": "2024-06-15T14:32:00.123456",
+        "site_id": site_id,
+        "site_type": "office",
+        "consumption_kw": 100.0,
+        "consumption_kwh": 100.0,
+        "voltage_v": 400.0,
+        "current_a": 144.0,
+        "power_factor": 0.95,
+        "temperature_celsius": 20.0,
+        "humidity_percent": 40.0,
+        "null_reasons": [],
+        "data_quality": "good",
+        **overrides,
+    }
+    return EnergyReading(**data)
 
 
 def test_get_sites_success():
-    client = ApiMockClient(base_url="http://fake:8000")
-    sites_payload = [{"site_id": "SITE001", "site_name": "Bureau Paris"}]
+    mock_inner = Mock()
+    mock_inner.get_sites.return_value = [_mock_site()]
+    client = _make_client(mock_inner)
 
-    with patch(
-        "infrastructure.api_client.requests.get", return_value=_mock_response(sites_payload)
-    ) as mock_get:
-        sites = client.get_sites()
+    sites = client.get_sites()
 
-    assert sites == [Site(site_id="SITE001", site_name="Bureau Paris")]
-    mock_get.assert_called_once_with(
-        "http://fake:8000/api/v1/sites", params=None, timeout=client.timeout
-    )
+    assert sites == [
+        Site(
+            site_id="SITE001",
+            site_name="Bureau Paris",
+            site_type="office",
+            location="Paris, France",
+            capacity_kw=200.0,
+            status="active",
+        )
+    ]
 
 
 def test_get_current_reading_success():
-    client = ApiMockClient(base_url="http://fake:8000")
-    reading_payload = {"site_id": "SITE001", "timestamp": "2024-06-15T14:32:00.123456"}
+    mock_inner = Mock()
+    mock_inner.get_current.return_value = _mock_reading()
+    client = _make_client(mock_inner)
 
-    with patch(
-        "infrastructure.api_client.requests.get", return_value=_mock_response(reading_payload)
-    ):
-        reading = client.get_current_reading("SITE001")
+    reading = client.get_current_reading("SITE001")
 
-    assert reading == Reading(site_id="SITE001", timestamp="2024-06-15T14:32:00.123456")
+    assert reading == Reading(
+        site_id="SITE001",
+        timestamp="2024-06-15T14:32:00.123456",
+        site_type="office",
+        consumption_kw=100.0,
+        consumption_kwh=100.0,
+        voltage_v=400.0,
+        current_a=144.0,
+        power_factor=0.95,
+        temperature_celsius=20.0,
+        humidity_percent=40.0,
+        null_reasons=[],
+        data_quality="good",
+    )
+    mock_inner.get_current.assert_called_once_with("SITE001")
 
 
 def test_api_unavailable_connection_error_does_not_crash_and_is_logged(caplog):
-    client = ApiMockClient(base_url="http://fake:8000")
+    mock_inner = Mock()
+    mock_inner.get_current.side_effect = MockApiConnectionError("boom")
+    client = _make_client(mock_inner)
 
     with caplog.at_level("ERROR"):
-        with patch(
-            "infrastructure.api_client.requests.get",
-            side_effect=requests.exceptions.ConnectionError("boom"),
-        ):
-            reading = client.get_current_reading("SITE001")
+        reading = client.get_current_reading("SITE001")
 
     assert reading is None
     assert "Échec de l'appel à l'API mock" in caplog.text
 
 
 def test_api_unavailable_timeout_does_not_crash():
-    client = ApiMockClient(base_url="http://fake:8000")
+    mock_inner = Mock()
+    mock_inner.get_sites.side_effect = MockApiTimeoutError("timeout")
+    client = _make_client(mock_inner)
 
-    with patch(
-        "infrastructure.api_client.requests.get",
-        side_effect=requests.exceptions.Timeout("timeout"),
-    ):
-        sites = client.get_sites()
+    sites = client.get_sites()
 
     assert sites == []
 
 
 def test_http_error_returns_default_without_crash():
-    client = ApiMockClient(base_url="http://fake:8000")
+    mock_inner = Mock()
+    mock_inner.get_sites.side_effect = MockApiHTTPError(500, "server error")
+    client = _make_client(mock_inner)
 
-    with patch(
-        "infrastructure.api_client.requests.get", return_value=_mock_response(None, status_code=500)
-    ):
-        sites = client.get_sites()
+    sites = client.get_sites()
 
     assert sites == []
 
 
 def test_get_readings_forwards_params_to_api_mock():
-    client = ApiMockClient(base_url="http://fake:8000")
-    readings_payload = [{"site_id": "SITE002", "timestamp": "2024-01-15T08:00:00"}]
+    mock_inner = Mock()
+    mock_inner.get_readings.return_value = [_mock_reading(site_id="SITE002")]
+    client = _make_client(mock_inner)
 
-    with patch(
-        "infrastructure.api_client.requests.get", return_value=_mock_response(readings_payload)
-    ) as mock_get:
-        readings = client.get_readings(
-            site_id="SITE002", start_time="2024-01-15T08:00:00", limit=48
-        )
+    readings = client.get_readings(site_id="SITE002", start_time="2024-01-15T08:00:00", limit=48)
 
-    assert readings == [Reading(site_id="SITE002", timestamp="2024-01-15T08:00:00")]
-    mock_get.assert_called_once_with(
-        "http://fake:8000/api/v1/readings",
-        params={"limit": 48, "site_id": "SITE002", "start_time": "2024-01-15T08:00:00"},
-        timeout=client.timeout,
+    assert [r.site_id for r in readings] == ["SITE002"]
+    mock_inner.get_readings.assert_called_once_with(
+        site_id="SITE002", start="2024-01-15T08:00:00", end=None, limit=48
     )
 
 
 def test_get_readings_defaults_to_no_filters_and_limit_100():
-    client = ApiMockClient(base_url="http://fake:8000")
+    mock_inner = Mock()
+    mock_inner.get_readings.return_value = []
+    client = _make_client(mock_inner)
 
-    with patch(
-        "infrastructure.api_client.requests.get", return_value=_mock_response([])
-    ) as mock_get:
-        client.get_readings()
+    client.get_readings()
 
-    mock_get.assert_called_once_with(
-        "http://fake:8000/api/v1/readings", params={"limit": 100}, timeout=client.timeout
-    )
+    mock_inner.get_readings.assert_called_once_with(site_id=None, start=None, end=None, limit=100)

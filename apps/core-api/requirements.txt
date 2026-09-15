@@ -1,4 +1,7 @@
-requests>=2.31
+# Chemin relatif résolu depuis le dossier courant au moment du `pip install`
+# (cd apps/core-api && pip install -r requirements.txt) : un futur Dockerfile
+# doit préserver la même profondeur relative apps/core-api <-> packages/.
+-e ../../packages/mockapi-client
 python-dotenv>=1.0
 fastapi>=0.110
 uvicorn[standard]>=0.29
