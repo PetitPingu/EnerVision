@@ -1,0 +1,58 @@
+name: Branch Name Validation
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - dev
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+
+jobs:
+  validate-branch-name:
+    name: Validate branch name
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check branch name
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ github.head_ref || github.ref_name }}"
+
+          echo "Branche à valider : ${BRANCH_NAME}"
+
+          # Branches protégées / outils (pas de préfixe conventional commit)
+          if [[ "${BRANCH_NAME}" =~ ^(main|dev)$ ]]; then
+            echo "Branche principale autorisée."
+            exit 0
+          fi
+
+          if [[ "${BRANCH_NAME}" =~ ^dependabot/ ]]; then
+            echo "Branche Dependabot autorisée."
+            exit 0
+          fi
+
+          # Conventional Commits : <type>/<description> ou <type>/<scope>/<description>
+          # Types : feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+          PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([a-z0-9._-]*[a-z0-9]+)?(/[a-z0-9]+([a-z0-9._-]*[a-z0-9]+)?)*$'
+
+          if [[ "${BRANCH_NAME}" =~ ${PATTERN} ]]; then
+            echo "Nom de branche conforme aux conventions Conventional Commits."
+            exit 0
+          fi
+
+          echo "::error::Nom de branche invalide : '${BRANCH_NAME}'"
+          echo ""
+          echo "Format attendu : <type>/<description> ou <type>/<scope>/<description>"
+          echo "Types autorisés : feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+          echo ""
+          echo "Exemples valides :"
+          echo "  feat/add-user-auth"
+          echo "  fix/dashboard-login-error"
+          echo "  chore/update-dependencies"
+          echo "  docs/architecture-diagrams"
+          exit 1
