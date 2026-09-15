@@ -10,15 +10,30 @@ Lancer en local (depuis apps/core_api) :
 Puis ouvrir http://127.0.0.1:8001/docs pour explorer les endpoints.
 """
 
+import os
 from dataclasses import asdict
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from infrastructure.api_client import ApiMockClient
 
 app = FastAPI(
     title="EnerVision core_api",
     description="Relaie les endpoints de l'API mock EnerVision.",
     version="1.0.0",
+)
+
+_cors_origins = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000",
+).split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in _cors_origins if origin.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 sensor_api = ApiMockClient()
