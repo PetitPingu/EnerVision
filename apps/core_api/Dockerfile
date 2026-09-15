@@ -12,4 +12,6 @@ COPY apps/core_api/ .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "presentation.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Applique les migrations Alembic (tables + hypertable TimescaleDB) avant de
+# démarrer, pour que le schéma existe dès le premier `docker compose up`.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]
