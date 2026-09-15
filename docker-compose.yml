@@ -1,0 +1,98 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - enervision-net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - enervision-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  core-api:
+    build:
+      context: ./services/core-api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PREDICTION_URL: http://prediction:8000
+      RECOMMENDATION_URL: http://recommendation:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prediction:
+        condition: service_started
+      recommendation:
+        condition: service_started
+    networks:
+      - enervision-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.core-api.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.core-api.entrypoints=web"
+      - "traefik.http.services.core-api.loadbalancer.server.port=8000"
+
+  prediction:
+    build:
+      context: ./services/prediction
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
+  recommendation:
+    build:
+      context: ./services/recommendation
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PREDICTION_URL: http://prediction:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prediction:
+        condition: service_started
+    networks:
+      - enervision-net
+
+  worker-etl:
+    build:
+      context: ./services/worker-etl
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MOCK_API_URL: ${MOCK_API_URL}
+      ETL_POLL_INTERVAL_SECONDS: ${ETL_POLL_INTERVAL_SECONDS:-60}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
+networks:
+  enervision-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
