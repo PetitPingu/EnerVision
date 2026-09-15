@@ -7,8 +7,9 @@ pas de cron externe) :
 1. **Ingestion** (toutes les 60 secondes) : un seul appel
    `GET /api/v1/readings?limit=7` (les dernières lectures, une par site),
    écrites telles quelles dans le bucket MinIO `raw`
-   (`raw/{date}/{site_id}.json` — un fichier par site et par jour,
-   écrasé à chaque nouvelle lecture).
+   (`raw/{date}/{site_id}_{timestamp}.json` — un fichier par lecture,
+   jamais écrasé : l'horodatage dans la clé garantit qu'aucune donnée
+   intraday n'est perdue).
 2. **Transformation** (toutes les heures) : relit tous les fichiers du
    jour dans `raw`, les valide (mêmes modèles Pydantic que l'ingestion),
    et les charge dans `consumption_readings` (Postgres/TimescaleDB).
@@ -79,7 +80,7 @@ python -m pytest -v
 
 | Point | Comment vérifier |
 |---|---|
-| 7 objets JSON dans `raw` (un par site, écrasés à chaque cycle) | Console web http://localhost:9001 (identifiants dans `.env`) → bucket `raw` |
+| 7 nouveaux objets JSON dans `raw` par cycle (un par site, jamais écrasés) | Console web http://localhost:9001 (identifiants dans `.env`) → bucket `raw` |
 | Transformation chargée dans Postgres | `docker compose exec postgres psql -U enervision -d enervision -c "SELECT count(*) FROM consumption_readings;"` |
 | Une lecture `critical` est stockée, pas ignorée | `... WHERE data_quality = 'critical'` (aléatoire côté API mock, peut prendre plusieurs minutes à apparaître) |
 | Rejouer la transformation ne crée aucun doublon | Relancer le job (attendre l'heure suivante, ou l'appeler manuellement), recompter : ne doit pas augmenter |

@@ -1,8 +1,10 @@
 """Écrit le JSON brut de chaque lecture dans le bucket raw.
 
-Chemin objet : {date}/{site_id}.json — conforme au diagramme d'ingestion
-(docs/seq_etl.md) : un fichier par site et par jour, écrasé à chaque
-nouvelle lecture du jour.
+Chemin objet : {date}/{site_id}_{timestamp}.json — un fichier par lecture
+(l'horodatage de la lecture rend la clé unique), pour ne perdre aucune
+donnée intraday : contrairement à une clé {date}/{site_id}.json, chaque
+nouvelle lecture du jour vient s'ajouter plutôt que d'écraser la
+précédente.
 """
 
 from datetime import datetime, timezone
@@ -28,7 +30,7 @@ class RawWriter:
     def write(self, site_id: str, timestamp: str, raw_payload: bytes) -> str:
         """Écrit raw_payload dans le bucket raw et retourne la clé de l'objet."""
         moment = self._parse_timestamp(timestamp)
-        object_key = f"{moment:%Y-%m-%d}/{site_id}.json"
+        object_key = f"{moment:%Y-%m-%d}/{site_id}_{moment:%Y%m%dT%H%M%S%f}.json"
         self._client.put_object(
             self._bucket,
             object_key,
