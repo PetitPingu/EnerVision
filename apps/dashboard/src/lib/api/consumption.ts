@@ -1,17 +1,45 @@
-import type { ConsumptionReading } from "@/types/consumption";
+import {
+  MOCKED_SITE_IDS,
+  READINGS_ENDPOINT,
+  READINGS_LIMIT,
+} from "@/config/api";
+import { apiClient } from "@/lib/api/client";
 import { SITE001_MOCK_READINGS } from "@/lib/api/mock/site001-consumption";
+import type { ConsumptionReading, DataQuality } from "@/types/consumption";
+
+type ApiConsumptionReading = Omit<ConsumptionReading, "site_type" | "data_quality"> & {
+  site_type: string | null;
+  data_quality: string | null;
+};
+
+function mapReading(raw: ApiConsumptionReading): ConsumptionReading {
+  return {
+    ...raw,
+    site_type: raw.site_type ?? "unknown",
+    null_reasons: raw.null_reasons ?? [],
+    data_quality: (raw.data_quality ?? "good") as DataQuality,
+  };
+}
 
 export async function getConsumptionReadings(
   siteId: string,
 ): Promise<ConsumptionReading[]> {
-  // Branchement futur :
-  // const { data } = await apiClient.get<ConsumptionReading[]>(
-  //   `/sites/${siteId}/consumption`,
-  // );
-  // return data;
-
-  if (siteId === "SITE001") {
-    return SITE001_MOCK_READINGS;
+  if (MOCKED_SITE_IDS.has(siteId)) {
+    if (siteId === "SITE001") {
+      return SITE001_MOCK_READINGS;
+    }
+    return [];
   }
-  return [];
+
+  const { data } = await apiClient.get<ApiConsumptionReading[]>(
+    READINGS_ENDPOINT,
+    {
+      params: {
+        site_id: siteId,
+        limit: READINGS_LIMIT,
+      },
+    },
+  );
+
+  return data.map(mapReading);
 }
