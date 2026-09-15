@@ -1,6 +1,6 @@
 ## Diagramme de séquence du Worker ETL
 
-### Ingestion des données brutes
+### Ingestion des données brutes avec détection d'alertes temps réel (Redis Streams)
 
 #### Mermaid
 
@@ -11,6 +11,7 @@ sequenceDiagram
     participant Worker as Worker ETL
     participant Mock as API Mock EnerVision
     participant MinIO as MinIO (S3)
+    participant Redis as Redis Streams
 
     loop Toutes les minutes
         Cron->>Worker: Déclenche le job ETL
@@ -18,9 +19,13 @@ sequenceDiagram
         Mock-->>Worker: 200 OK + données brutes (JSON)
         Worker->>MinIO: PUT raw/{date}/{site_id}.json
         MinIO-->>Worker: 200 OK
+        alt data_quality == "critical" ou seuil dépassé
+            Worker->>Redis: XADD alert.detected {site_id, timestamp, data_quality}
+        end
     end
 
     Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation
+    Note over Worker,Redis: Détection à la minute, indépendante du job<br/>de transformation horaire (qui reste inchangé)
 ```
 
 ### Transformation des données brutes
