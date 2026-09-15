@@ -34,7 +34,3 @@ sequenceDiagram
  
     Note over Pred,MLflow: Cold start : au démarrage, Pred charge directement<br/>la dernière version "Production" depuis le Model Registry MLflow<br/>(pas de réentraînement synchrone nécessaire)
 ```
-
-#### Diagramme
-
-![image](images/seq_prediction.png)

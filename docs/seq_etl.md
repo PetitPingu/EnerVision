@@ -48,7 +48,3 @@ EOFsequenceDiagram
         end
     end
 ```
-
-#### Diagramme
-
-![image](images/seq_etl.png)

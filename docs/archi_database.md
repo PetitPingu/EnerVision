@@ -65,7 +65,3 @@ erDiagram
     SITES ||--o{ RECOMMENDATIONS : "recoit"
     PREDICTIONS |o--o| RECOMMENDATIONS : "declenche"
 ```
-
-#### Diagramme
-
-![image](images/archi_database.png)

@@ -4,7 +4,7 @@ Le système est déployé sur une seule VM on-premise mise à disposition par l'
 
 ### Services :
 
-API / BFF (FastAPI) - point d'entrée pour le dashboard, agrège les appels vers Prediction et Recommendation.
+Core API (FastAPI) - point d'entrée pour le dashboard, agrège les appels vers Prediction et Recommendation.
 Recommendation (FastAPI) - règles à seuils, consomme les prédictions.
 Prediction (FastAPI) - sert le modèle prédictif, expose la route /predict qui lit un modèle gardé en mémoire (rechargé toutes les 24h). Un cron interne (APScheduler) réentraîne le modèle sur l'historique Postgres, log le run et enregistre le modèle dans MLflow, puis recharge la version "Production" en mémoire.
 Worker ETL (async) - au lieu d'un déclenchement externe managé par le cloud, c'est un processus qui tourne en continu dans son propre conteneur et interroge l'API mock à intervalle régulier pour ingérer, transformer et charger les données. Il n'expose pas d'endpoint HTTP - ce n'est pas une API, c'est un worker.
@@ -30,7 +30,7 @@ flowchart TB
         subgraph Net["Docker Compose"]
             RP["Traefik - Reverse Proxy"]
             Dash["Dashboard (Next.js / React)"]
-            API["API / BFF (FastAPI)"]
+            API["Core API (FastAPI)"]
             Pred["Prediction (FastAPI)"]
             Reco["Recommendation (FastAPI)"]
             Etl["Worker ETL (async, remplace EventBridge)"]
@@ -59,7 +59,3 @@ flowchart TB
  
     style Net fill:#f5f7fa,stroke:#4a5568,stroke-width:1px
 ```
-
-#### Diagramme
-
-![image](images/archi_infra.png)

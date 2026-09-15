@@ -11,7 +11,7 @@ flowchart LR
  
     subgraph VM["VM On-Premise (École)"]
         Traefik["Traefik - Reverse Proxy"]
-        BFF["API BFF"]
+        Core["Core API"]
         Pred["Service Prediction"]
         Reco["Service Recommandation"]
         ETL["Worker ETL"]
@@ -29,15 +29,11 @@ flowchart LR
     MLflow -- "artifacts modèle" --> MinIO
     MLflow -- "runs / métriques (backend store)" --> PG
     Pred -- "prédiction" --> Reco
-    PG -- "lecture / écriture" --> BFF
-    Pred -- "/predict" --> BFF
-    Reco -- "/recommendations" --> BFF
-    BFF <--> Traefik
+    PG -- "lecture / écriture" --> Core
+    Pred -- "/predict" --> Core
+    Reco -- "/recommendations" --> Core
+    Core <--> Traefik
     Traefik <--> Dash
     Traefik <-- "UI MLflow (auth basique)" --> MLflow
     User <--> Dash
 ```
-
-#### Diagramme
-
-![image](images/flow_data.png)
