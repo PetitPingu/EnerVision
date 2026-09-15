@@ -6,7 +6,8 @@ function formatSiteLabel(site: {
   site_id: string;
   site_name: string | null;
 }): string {
-  return site.site_name ?? site.site_id;
+  const label = site.site_name ?? site.site_id;
+  return `${site.site_id} - ${label}`;
 }
 
 export function SiteSelect() {
@@ -26,7 +27,7 @@ export function SiteSelect() {
         value={selectedSiteId}
         onChange={(event) => setSelectedSiteId(event.target.value)}
         disabled={isLoading || sites.length === 0}
-        className="h-10 min-w-[12rem] appearance-none rounded-xl border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-10 min-w-[16rem] appearance-none rounded-xl border border-zinc-200 bg-white py-2 pl-3 pr-9 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isLoading ? (
           <option value={selectedSiteId}>Chargement…</option>
