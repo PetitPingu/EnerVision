@@ -78,7 +78,7 @@ services:
       context: .
       dockerfile: apps/core_api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000
       RECOMMENDATION_URL: http://recommendation:8000
     depends_on:
