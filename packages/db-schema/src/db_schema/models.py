@@ -28,35 +28,7 @@ class Site(Base):
     capacity_kw: Mapped[float | None]
     status: Mapped[str | None]
 
-    readings: Mapped[list["Reading"]] = relationship(back_populates="site")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="site")
-
-
-class Reading(Base):
-    """Une mesure de capteurs pour un site, à un instant donné.
-
-    Clé primaire composite (site_id, timestamp) : `timestamp` est la colonne de
-    partitionnement attendue par TimescaleDB pour transformer cette table en
-    hypertable (voir la migration Alembic correspondante).
-    """
-
-    __tablename__ = "readings"
-    __table_args__ = {"schema": "enervision"}
-
-    site_id: Mapped[str] = mapped_column(ForeignKey("enervision.sites.site_id"), primary_key=True)
-    timestamp: Mapped[datetime] = mapped_column(primary_key=True)
-    site_type: Mapped[str | None]
-    consumption_kw: Mapped[float | None]
-    consumption_kwh: Mapped[float | None]
-    voltage_v: Mapped[float | None]
-    current_a: Mapped[float | None]
-    power_factor: Mapped[float | None]
-    temperature_celsius: Mapped[float | None]
-    humidity_percent: Mapped[float | None]
-    null_reasons: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-    data_quality: Mapped[str | None]
-
-    site: Mapped["Site"] = relationship(back_populates="readings")
 
 
 class Alert(Base):
