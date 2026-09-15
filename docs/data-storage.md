@@ -44,9 +44,11 @@ ports sont configurables via le fichier `.env` (voir `.env.example`).
   le nom du service reste `postgres` pour ne pas casser les références des
   autres services (`core_api`, `prediction`, `recommendation`, `etl_worker`).
 - L'extension `timescaledb` et le schéma `enervision`, ainsi que toutes
-  les tables applicatives, sont créés par les migrations Alembic de
-  `core_api` (`apps/core_api/alembic/versions/`), appliquées
-  automatiquement au démarrage du conteneur (`alembic upgrade head`).
+  les tables applicatives, sont créés par les migrations Alembic du
+  package partagé `packages/db-schema/` (indépendant de toute app),
+  appliquées automatiquement au démarrage de `core_api`
+  (`alembic -c /packages/db-schema/alembic.ini upgrade head`) — mais
+  applicables par n'importe quel autre service de la même façon.
 - Connexion : `psql postgresql://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:<POSTGRES_PORT>/<POSTGRES_DB>`
 
 ## MinIO

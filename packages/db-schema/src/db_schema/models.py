@@ -1,10 +1,10 @@
-"""Modèles ORM (SQLAlchemy) mappés aux entités du domaine.
+"""Modèles ORM (SQLAlchemy) du schéma partagé.
 
-Distincts des dataclasses de domain/entities.py : le domaine reste pur, ces
-classes ne sont utilisées que par la couche infrastructure (accès DB).
-Tables créées dans le schéma `enervision` (voir la migration Alembic
-0d230748d8a2_bootstrap_extension_and_schema, qui crée l'extension
-timescaledb et le schéma avant tout le reste).
+Distincts des dataclasses de domain/entities.py de chaque app : le domaine
+applicatif reste pur, ces classes ne sont utilisées que par la couche
+infrastructure (accès DB). Tables créées dans le schéma `enervision`
+(voir la migration Alembic 0d230748d8a2_bootstrap_extension_and_schema,
+qui crée l'extension timescaledb et le schéma avant tout le reste).
 """
 
 from datetime import datetime

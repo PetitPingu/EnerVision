@@ -1,5 +1,5 @@
-from infrastructure import orm_models
-from infrastructure.database import Base
+from db_schema import models as orm_models
+from db_schema.database import Base
 
 
 def test_registers_one_table_per_entity_in_the_enervision_schema():

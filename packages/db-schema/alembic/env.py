@@ -6,9 +6,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
-from infrastructure import orm_models  # noqa: F401 - enregistre les tables sur Base.metadata
-from infrastructure.config import Config
-from infrastructure.database import Base
+from db_schema import Base
+from db_schema import models  # noqa: F401 - enregistre les tables sur Base.metadata
+from db_schema.config import Config
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -19,7 +19,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# DATABASE_URL (env var, voir infrastructure/config.py) prime sur la valeur
+# DATABASE_URL (env var, voir db_schema/config.py) prime sur la valeur
 # statique de alembic.ini, pour ne pas dupliquer la config de connexion.
 config.set_main_option("sqlalchemy.url", Config.DATABASE_URL)
 

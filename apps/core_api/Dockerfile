@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Contexte de build = racine du repo (voir docker-compose.yml), pour copier
-# packages/ (dépendance partagée mockapi-client) dans l'image.
+# packages/ (dépendances partagées mockapi-client, db-schema) dans l'image.
 COPY packages/ /packages/
 COPY apps/core_api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -14,4 +14,7 @@ EXPOSE 8000
 
 # Applique les migrations Alembic (tables + hypertable TimescaleDB) avant de
 # démarrer, pour que le schéma existe dès le premier `docker compose up`.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]
+# Le schéma vit dans packages/db-schema (partagé, pas propre à core_api) :
+# n'importe quel autre service peut appliquer ces migrations de la même
+# façon, sans dépendre du démarrage de core_api.
+CMD ["sh", "-c", "alembic -c /packages/db-schema/alembic.ini upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]

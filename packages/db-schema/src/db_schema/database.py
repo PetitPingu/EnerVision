@@ -1,8 +1,8 @@
 """Connexion SQLAlchemy à la base PostgreSQL/TimescaleDB (moteur async, driver psycopg).
 
-Couche infrastructure : le domaine (domain/entities.py) reste des dataclasses
-pures, sans dépendance SQL. Les modèles ORM mappés aux tables vivent dans
-infrastructure/orm_models.py et ne sont utilisés qu'à cette couche.
+Package partagé : le schéma de base (tables, migrations Alembic) ne
+dépend d'aucune app en particulier — plusieurs services peuvent s'y
+brancher indépendamment, sans que l'un dépende du démarrage de l'autre.
 """
 
 from collections.abc import AsyncIterator
@@ -14,7 +14,7 @@ from .config import Config
 
 
 class Base(DeclarativeBase):
-    """Classe de base déclarative pour tous les modèles ORM de core-api."""
+    """Classe de base déclarative pour tous les modèles ORM du schéma partagé."""
 
 
 engine = create_async_engine(Config.DATABASE_URL, pool_pre_ping=True)
