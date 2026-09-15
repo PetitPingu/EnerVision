@@ -25,4 +25,6 @@ class Config:
     MINIO_RAW_BUCKET = os.environ.get("MINIO_RAW_BUCKET", "raw")
     MINIO_SECURE = os.environ.get("MINIO_SECURE", "false").lower() == "true"
 
+    REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
     POLL_INTERVAL_SECONDS = int(os.environ.get("ETL_POLL_INTERVAL_SECONDS", "60"))

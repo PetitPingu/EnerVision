@@ -1,18 +1,23 @@
 # Worker ETL (issue #19)
 
-Le worker `etl_worker` implémente les deux étages prévus dans
-[docs/seq_etl.md](seq_etl.md), sur des scheduler internes (APScheduler,
-pas de cron externe) :
+Le worker `etl_worker` implémente le cycle décrit dans
+[docs/seq_etl.md](seq_etl.md) : un seul job planifié (APScheduler, pas de
+cron externe), toutes les 60 secondes, qui fait tout en un cycle :
 
-1. **Ingestion** (toutes les 60 secondes) : un seul appel
-   `GET /api/v1/readings?limit=7` (les dernières lectures, une par site),
-   écrites telles quelles dans le bucket MinIO `raw`
+1. Un seul appel `GET /api/v1/readings?limit=7` (les dernières lectures,
+   une par site).
+2. Pour chaque lecture : écriture brute dans le bucket MinIO `raw`
    (`raw/{date}/{site_id}_{timestamp}.json` — un fichier par lecture,
    jamais écrasé : l'horodatage dans la clé garantit qu'aucune donnée
    intraday n'est perdue).
-2. **Transformation** (toutes les heures) : relit tous les fichiers du
-   jour dans `raw`, les valide (mêmes modèles Pydantic que l'ingestion),
-   et les charge dans `consumption_readings` (Postgres/TimescaleDB).
+3. Insertion dans `consumption_readings` (Postgres/TimescaleDB),
+   idempotente (`ON CONFLICT DO NOTHING`).
+4. Publication d'une alerte sur Redis Streams (`alert.detected`) si
+   `data_quality == "critical"`.
+
+Chaque étape (MinIO, Postgres, Redis) est isolée par son propre
+`try/except` : une panne sur l'une n'empêche jamais les autres de
+s'exécuter, ni le cycle suivant de démarrer.
 
 Une lecture `critical` (tous les capteurs en panne, tout est `null`) suit
 exactement le même chemin — rien n'est filtré ni corrigé à aucune étape
@@ -30,7 +35,7 @@ appliquée automatiquement au démarrage du conteneur `core_api`
 l'appelle jamais directement :
 
 ```bash
-docker compose up -d postgres minio minio-init core_api
+docker compose up -d postgres minio minio-init redis core_api
 ```
 
 `core_api` dépend à son tour de `prediction`/`recommendation` dans
@@ -53,17 +58,16 @@ python -m pip install -r requirements.txt -r requirements-dev.txt
 python main.py
 ```
 
-Le job d'ingestion logge une ligne JSON par site à chaque cycle :
+Une ligne de log JSON par lecture traitée, à chaque cycle :
 
 ```json
-{"site": "SITE001", "status": "written", "data_quality": "good", "object_key": "2026-09-15/SITE001.json"}
+{"site": "SITE001", "status": "inserted", "data_quality": "good", "object_key": "2026-09-15/SITE001_20260915T151204246264.json"}
 ```
 
-Le job de transformation logge un résumé par heure :
-
-```json
-{"job": "transform", "date": "2026-09-15", "files": 7, "inserted": 7, "duplicates": 0, "errors": 0}
-```
+`status` vaut `"duplicate"` si la ligne existait déjà en base,
+`"raw_write_error"`/`"db_error"`/`"alert_publish_error"` si l'une des
+trois destinations était indisponible à ce cycle-là (le worker continue,
+il ne plante jamais sur une panne ponctuelle).
 
 ## Lancer les tests unitaires
 
@@ -81,9 +85,10 @@ python -m pytest -v
 | Point | Comment vérifier |
 |---|---|
 | 7 nouveaux objets JSON dans `raw` par cycle (un par site, jamais écrasés) | Console web http://localhost:9001 (identifiants dans `.env`) → bucket `raw` |
-| Transformation chargée dans Postgres | `docker compose exec postgres psql -U enervision -d enervision -c "SELECT count(*) FROM consumption_readings;"` |
+| Lignes chargées dans Postgres | `docker compose exec postgres psql -U enervision -d enervision -c "SELECT count(*) FROM consumption_readings;"` |
 | Une lecture `critical` est stockée, pas ignorée | `... WHERE data_quality = 'critical'` (aléatoire côté API mock, peut prendre plusieurs minutes à apparaître) |
-| Rejouer la transformation ne crée aucun doublon | Relancer le job (attendre l'heure suivante, ou l'appeler manuellement), recompter : ne doit pas augmenter |
+| Une alerte est publiée sur `critical` | `docker compose exec redis redis-cli XRANGE alert.detected - +` |
+| Redémarrer ne crée aucun doublon | Noter `SELECT count(*)`, redémarrer le worker, laisser tourner un cycle, recompter : ne doit ni reculer ni sauter anormalement |
 
 ## Dépannage rapide
 
