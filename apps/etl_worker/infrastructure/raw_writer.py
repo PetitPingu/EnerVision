@@ -1,18 +1,29 @@
 """Écrit le JSON brut de chaque lecture dans le bucket raw.
 
-Chemin objet : {date}/{site_id}_{timestamp}.json — un fichier par lecture
-(l'horodatage de la lecture rend la clé unique), pour ne perdre aucune
-donnée intraday : contrairement à une clé {date}/{site_id}.json, chaque
-nouvelle lecture du jour vient s'ajouter plutôt que d'écraser la
-précédente.
+Chemin objet : {YYYY}/{MM}/{DD}/{HH}/{numéro_site}_{MM_minutes}.json —
+partitionnement par heure (convention Hive, courante pour un data lake :
+liste/filtre efficace par période). Le nom de fichier ne garde que le
+numéro du site et les minutes : plus compact, mais moins unique que
+l'horodatage complet — deux écritures du même site dans la même minute
+s'écraseraient (peu probable au rythme d'un cycle par minute, mais
+possible si le worker redémarre au mauvais moment).
+
+L'arborescence utilise l'heure locale (Europe/Paris, DST géré
+automatiquement), fixée explicitement plutôt que de dépendre du fuseau
+système : un conteneur Docker est en UTC par défaut, quel que soit le
+fuseau de la machine hôte.
 """
 
+import re
 from datetime import datetime, timezone
 from io import BytesIO
+from zoneinfo import ZoneInfo
 
 from minio import Minio
 
 from .config import Config
+
+LOCAL_TZ = ZoneInfo("Europe/Paris")
 
 
 class RawWriter:
@@ -29,8 +40,9 @@ class RawWriter:
 
     def write(self, site_id: str, timestamp: str, raw_payload: bytes) -> str:
         """Écrit raw_payload dans le bucket raw et retourne la clé de l'objet."""
-        moment = self._parse_timestamp(timestamp)
-        object_key = f"{moment:%Y-%m-%d}/{site_id}_{moment:%Y%m%dT%H%M%S%f}.json"
+        moment = self._parse_timestamp(timestamp).astimezone(LOCAL_TZ)
+        site_number = self._site_number(site_id)
+        object_key = f"{moment:%Y/%m/%d/%H}/{site_number}_{moment:%M}.json"
         self._client.put_object(
             self._bucket,
             object_key,
@@ -46,3 +58,9 @@ class RawWriter:
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=timezone.utc)
         return moment
+
+    @staticmethod
+    def _site_number(site_id: str) -> str:
+        """Extrait le numéro du site (ex: "SITE001" -> "001")."""
+        match = re.search(r"\d+", site_id)
+        return match.group() if match else site_id
