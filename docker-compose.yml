@@ -5,10 +5,12 @@ services:
       # (dépendance partagée mockapi-client) dans l'image.
       context: .
       dockerfile: apps/core_api/Dockerfile
+    # Même fichier que en local (voir apps/core_api/.env.example).
+    # Ne pas redéfinir ENERVISION_API_* dans environment : cela écraserait
+    # les valeurs du fichier et empêcherait d'atteindre l'API mock du formateur.
+    env_file:
+      - apps/core_api/.env
     environment:
-      ENERVISION_API_HOST: ${ENERVISION_API_HOST:-host.docker.internal}
-      ENERVISION_API_PORT: ${ENERVISION_API_PORT:-1234}
-      ENERVISION_REQUEST_TIMEOUT: ${ENERVISION_REQUEST_TIMEOUT:-5}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     ports:
       - "${CORE_API_PORT:-8000}:8000"
