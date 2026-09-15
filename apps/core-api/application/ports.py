@@ -7,7 +7,7 @@ dépendance).
 
 from abc import ABC, abstractmethod
 
-from domain.entities import Reading, Site
+from domain.entities import Alert, Reading, Site
 
 
 class SensorApiPort(ABC):
@@ -30,3 +30,11 @@ class SensorApiPort(ABC):
         limit: int = 100,
     ) -> list[Reading]:
         """Historique des lectures sur une période. Retourne [] si indisponible."""
+
+    @abstractmethod
+    def get_alerts(self, site_id: str = None, severity: str = None) -> list[Alert]:
+        """Alertes de consommation actives. Retourne [] si indisponible."""
+
+    @abstractmethod
+    def get_sensors_status(self) -> dict:
+        """État de santé des capteurs par site. Retourne {} si indisponible."""

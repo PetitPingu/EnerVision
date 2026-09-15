@@ -9,8 +9,9 @@ loggées et une valeur par défaut est retournée à l'appelant.
 import logging
 
 from application.ports import SensorApiPort
-from domain.entities import Reading, Site
+from domain.entities import Alert, Reading, Site
 from mockapi_client import EnergyReading, MockApiClient, MockApiError
+from mockapi_client import Alert as MockAlert
 from mockapi_client import Site as MockSite
 
 from .config import Config
@@ -68,6 +69,23 @@ class ApiMockClient(SensorApiPort):
             return []
         return [self._to_reading(item) for item in readings]
 
+    def get_alerts(self, site_id: str = None, severity: str = None) -> list[Alert]:
+        """Alertes de consommation actives, filtrables par site et/ou sévérité."""
+        try:
+            alerts = self._client.get_alerts(site_id=site_id, severity=severity)
+        except MockApiError as exc:
+            logger.error("Échec de l'appel à l'API mock (get_alerts) : %s", exc)
+            return []
+        return [self._to_alert(item) for item in alerts]
+
+    def get_sensors_status(self) -> dict:
+        """État de santé des capteurs par site (structure brute de l'API mock)."""
+        try:
+            return self._client.get_sensors_status()
+        except MockApiError as exc:
+            logger.error("Échec de l'appel à l'API mock (get_sensors_status) : %s", exc)
+            return {}
+
     @staticmethod
     def _to_site(item: MockSite) -> Site:
         return Site(
@@ -94,4 +112,17 @@ class ApiMockClient(SensorApiPort):
             humidity_percent=item.humidity_percent,
             null_reasons=list(item.null_reasons),
             data_quality=item.data_quality,
+        )
+
+    @staticmethod
+    def _to_alert(item: MockAlert) -> Alert:
+        return Alert(
+            alert_id=item.alert_id,
+            timestamp=item.timestamp,
+            site_id=item.site_id,
+            severity=item.severity,
+            type=item.type,
+            message=item.message,
+            value=item.value,
+            threshold=item.threshold,
         )
