@@ -33,7 +33,5 @@ sequenceDiagram
             end
         end
     end
-
-    Note over Worker,PG: Chaque étape (MinIO, PG, Redis) est isolée : une panne<br/>d'une des trois ne bloque jamais les autres, ni le cycle suivant
     Note over Worker,MinIO: Une lecture "critical" (tous les champs de mesure null)<br/>suit le même chemin — jamais filtrée ni corrigée
 ```
