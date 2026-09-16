@@ -16,10 +16,11 @@ class Config:
     """Paramètres de connexion et d'exécution du service Prediction."""
 
     DATABASE_URL = os.environ.get(
-        "DATABASE_URL", "postgresql://enervision:changeme@localhost:5432/enervision"
+        "DATABASE_URL",
+        "postgresql+psycopg://enervision:changeme@localhost:5432/enervision",
     )
     PORT = int(os.environ.get("PREDICTION_PORT", "8000"))
 
-    # mock : données synthétiques | json : fichier local | postgres : après rebase dev
+    # mock : données synthétiques | json : fichier local | postgres : readings_curated
     TRAINING_DATA_SOURCE = os.environ.get("TRAINING_DATA_SOURCE", "mock")
     TRAINING_DATA_JSON_PATH = os.environ.get("TRAINING_DATA_JSON_PATH", "")

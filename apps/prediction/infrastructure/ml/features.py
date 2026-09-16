@@ -50,7 +50,6 @@ def build_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Construit X (features) et y (target) à partir des lectures brutes.
 
     Les lignes sans consumption_kwh sont exclues (lectures critical / null).
-    Le filtre data_quality='good' est attendu en amont (requête SQL).
     """
     missing = set(RAW_COLUMNS) - set(df.columns)
     if missing:

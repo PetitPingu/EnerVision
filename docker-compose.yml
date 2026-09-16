@@ -112,9 +112,11 @@ services:
 
   prediction:
     build:
-      context: ./apps/prediction
+      context: .
+      dockerfile: apps/prediction/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      TRAINING_DATA_SOURCE: postgres
     depends_on:
       postgres:
         condition: service_healthy

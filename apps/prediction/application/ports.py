@@ -11,12 +11,12 @@ import pandas as pd
 
 
 class TrainingDataPort(ABC):
-    """Accès aux lectures consumption_readings pour l'entraînement ML."""
+    """Accès aux lectures readings_curated pour l'entraînement ML."""
 
     @abstractmethod
     def fetch_training_data(self) -> pd.DataFrame:
         """Retourne les lectures prêtes pour features.build_features().
 
         Colonnes attendues : site_id, timestamp, consumption_kwh.
-        Le filtre data_quality='good' est appliqué par l'implémentation.
+        Les lignes sans consumption_kwh sont exclues par l'implémentation.
         """
