@@ -15,7 +15,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from domain.imputation import ConsumptionKwhImputer
-from domain.metrics import imputation_metrics
 from ingestion import MockApiClient, MockApiError
 from mockapi_client import EnergyReading
 
@@ -68,13 +67,7 @@ class EtlJob:
             self._log(site=None, status="curated_write_error", data_quality=None, error=str(exc))
             return
 
-        self._log(
-            site=None,
-            status="curated",
-            data_quality=None,
-            written=len(curated_rows),
-            metrics=imputation_metrics(curated_rows),
-        )
+        self._log(site=None, status="curated", data_quality=None, written=len(curated_rows))
 
     def _process(self, reading: EnergyReading) -> dict | None:
         try:

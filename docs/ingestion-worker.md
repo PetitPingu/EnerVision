@@ -29,8 +29,7 @@ gardent leur valeur brute telle quelle, `None` inclus.
 
 Un seul cas, volontairement simple : **forward-fill**, sur
 `consumption_kwh` uniquement — reprend la dernière valeur connue du
-site, quelle que soit la taille du trou. `domain.metrics.imputation_metrics`
-calcule le % de lectures comblées par site, loggé à chaque cycle.
+site, quelle que soit la taille du trou.
 
 `imputation_methods` (colonne texte nullable de `readings_curated`)
 distingue trois cas pour chaque lecture :
@@ -79,7 +78,7 @@ Une ligne de log JSON par lecture traitée, puis un résumé par cycle :
 
 ```json
 {"site": "SITE001", "status": "written", "data_quality": "good", "object_key": "SITE001/2026/09/15/17/45.json", "imputation_method": null}
-{"site": null, "status": "curated", "data_quality": null, "written": 7, "metrics": {"SITE001": 0.0}}
+{"site": null, "status": "curated", "data_quality": null, "written": 7}
 ```
 
 `status` vaut `"raw_write_error"` si MinIO était indisponible pour cette
@@ -95,8 +94,8 @@ cd apps/etl_worker
 python -m pytest -v --cov=domain --cov-report=term-missing
 ```
 
-`domain/imputation.py` et `domain/metrics.py` sont testées en isolation
-(valeur connue, trou comblé, absence d'historique, sites indépendants).
+`domain/imputation.py` est testé en isolation (valeur connue, trou
+comblé, absence d'historique, sites indépendants).
 
 > Si `pytest` (sans `python -m`) dit "commande introuvable", c'est que le
 > dossier `Scripts`/`bin` de ton interpréteur n'est pas sur le PATH —

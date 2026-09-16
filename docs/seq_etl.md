@@ -29,7 +29,7 @@ sequenceDiagram
         end
         Worker->>DB: UPSERT readings_curated (7 lignes, site_id + timestamp)
         DB-->>Worker: OK
-        Note over Worker: Log JSON par lecture, puis un résumé :<br/>% de lectures comblées par site
+        Note over Worker: Log JSON par lecture, puis un résumé du nombre de lignes écrites
     end
 
     Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation. Une lecture "critical" suit le même chemin.
