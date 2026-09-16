@@ -40,11 +40,16 @@ class MockApiClient:
         timeout: float | None = None,
         max_retries: int | None = None,
         backoff_base: float | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
         self.base_url = base_url or Config.API_BASE_URL
         self.timeout = timeout if timeout is not None else Config.REQUEST_TIMEOUT
         self.max_retries = max_retries if max_retries is not None else Config.MAX_RETRIES
         self.backoff_base = backoff_base if backoff_base is not None else Config.BACKOFF_BASE
+        username = username if username is not None else Config.API_USERNAME
+        password = password if password is not None else Config.API_PASSWORD
+        self.auth = (username, password) if username is not None else None
 
     def get_sites(self) -> list[Site]:
         """Liste des sites industriels simulés."""
@@ -107,7 +112,9 @@ class MockApiClient:
         while True:
             attempt += 1
             try:
-                response = requests.get(url, params=params, timeout=self.timeout)
+                response = requests.get(
+                    url, params=params, timeout=self.timeout, auth=self.auth
+                )
             except requests.exceptions.Timeout as exc:
                 if attempt > self.max_retries:
                     raise MockApiTimeoutError(

@@ -8,16 +8,17 @@ partagé db_schema (packages/db-schema), pas ici.
 
 import os
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 
 class Config:
     """Paramètres de connexion à l'API mock."""
 
+    API_SCHEME = os.environ.get("ENERVISION_API_SCHEME", "http")
     API_HOST = os.environ.get("ENERVISION_API_HOST", "localhost")
     API_PORT = os.environ.get("ENERVISION_API_PORT", "8000")
-    API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
+    API_BASE_URL = f"{API_SCHEME}://{API_HOST}:{API_PORT}" if API_PORT else f"{API_SCHEME}://{API_HOST}"
 
     REQUEST_TIMEOUT = float(os.environ.get("ENERVISION_REQUEST_TIMEOUT", "5"))

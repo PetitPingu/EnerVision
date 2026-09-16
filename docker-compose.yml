@@ -145,8 +145,11 @@ services:
       # Pas encore utilisée par ce worker (ingestion uniquement) : préparée
       # pour la branche de transformation.
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      ENERVISION_API_SCHEME: ${ENERVISION_API_SCHEME:-http}
       ENERVISION_API_HOST: ${ENERVISION_API_HOST}
       ENERVISION_API_PORT: ${ENERVISION_API_PORT}
+      ENERVISION_API_USERNAME: ${ENERVISION_API_USERNAME}
+      ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
