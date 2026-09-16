@@ -1,13 +1,12 @@
-"""Cas d'usage : ingestion et curation des dernières lectures, en un seul
-passage (docs/seq_etl.md).
+"""Job principal du worker : ingestion + curation (docs/seq_etl.md).
 
-Un seul appel GET /api/v1/readings par cycle (limit=7 : une lecture par
-site). Chaque lecture est d'abord déposée telle quelle dans le bucket
-raw (traçabilité — aucune transformation, aucun filtrage, y compris une
-lecture "critical", invariant lecture-seule de DATA-02 / issue #16),
-puis immédiatement comblée si consumption_kwh est manquant
-(domain/imputation.py : reprend la dernière valeur connue du site, en
-mémoire) et upsert dans readings_curated.
+Chaque cycle fait 3 choses, dans l'ordre, pour chaque lecture reçue :
+
+1. Écrit la lecture brute dans MinIO (bucket raw), sans y toucher —
+   même une lecture "critical" (tous les capteurs en panne).
+2. Comble consumption_kwh si besoin (domain/imputation.py — reprend la
+   dernière valeur connue du site).
+3. Enregistre le résultat dans readings_curated (Postgres).
 """
 
 import json
@@ -63,7 +62,7 @@ class EtlJob:
 
         try:
             self.curated_writer.upsert_many(curated_rows)
-        except Exception as exc:  # noqa: BLE001 - panne Postgres : on logge, le cycle continue
+        except Exception as exc:  # noqa: BLE001 - Postgres en panne : on logge et on réessaiera au prochain cycle
             self._log(site=None, status="curated_write_error", data_quality=None, error=str(exc))
             return
 
@@ -76,7 +75,7 @@ class EtlJob:
                 timestamp=reading.timestamp,
                 raw_payload=reading.raw_payload,
             )
-        except Exception as exc:  # noqa: BLE001 - panne MinIO : on logge, le cycle continue
+        except Exception as exc:  # noqa: BLE001 - MinIO en panne : on logge et on passe à la lecture suivante
             self._log(
                 reading.site_id, status="raw_write_error", data_quality=reading.data_quality, error=str(exc)
             )

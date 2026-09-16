@@ -1,9 +1,8 @@
-"""Comble consumption_kwh par forward-fill au fil de l'eau, lecture par
-lecture, sans repasser par MinIO ni Postgres pour retrouver l'historique.
+"""Comble consumption_kwh quand il est manquant, lecture par lecture.
 
-Stateful par nature (contrairement à une fonction pure) : l'imputeur
-mémorise en mémoire la dernière valeur connue de chaque site au fil des
-cycles du worker.
+L'imputeur garde en mémoire la dernière valeur connue de chaque site,
+cycle après cycle — pas besoin de relire MinIO ou Postgres pour
+retrouver l'historique.
 """
 
 METHOD_FORWARD_FILL = "forward_fill"
@@ -19,14 +18,13 @@ class ConsumptionKwhImputer:
     def impute(self, site_id: str, value: float | None) -> tuple[float | None, str | None]:
         """Retourne (valeur_retenue, méthode) pour ce site.
 
-        `méthode` vaut :
-        - None si `value` était déjà connue (rien à combler) ;
-        - METHOD_FORWARD_FILL si `value` était manquante et qu'une valeur
-          antérieure connue a pu être reprise à sa place ;
-        - METHOD_NO_HISTORY si `value` était manquante et qu'aucune
-          valeur antérieure n'est disponible pour ce site (premier cycle
-          après un redémarrage du worker, ou site jamais vu) — la valeur
-          reste None, distinct d'un trou normal comblé.
+        Trois cas possibles pour `méthode` :
+        - `None` — la valeur était déjà connue, rien à faire.
+        - `METHOD_FORWARD_FILL` — la valeur manquait, on a repris la
+          dernière valeur connue.
+        - `METHOD_NO_HISTORY` — la valeur manquait, mais on n'a encore
+          rien en mémoire pour ce site (juste après un redémarrage du
+          worker, ou site jamais vu) : elle reste `None`.
         """
         if value is not None:
             self._last_known[site_id] = value

@@ -1,9 +1,9 @@
 """Écrit le résultat de la curation (EtlJob) dans readings_curated.
 
-Upsert sur (site_id, timestamp) : une lecture déjà curée (redémarrage,
-retraitement) est remplacée, pas dupliquée. Les valeurs finales (brutes
-ou imputées) arrivent déjà calculées dans `rows`, produites par
-domain.imputation.ConsumptionKwhImputer.
+Upsert sur (site_id, timestamp) : si la ligne existe déjà (worker
+redémarré, retraitement), elle est remplacée plutôt que dupliquée.
+Les valeurs à écrire arrivent déjà prêtes dans `rows` — ce module ne
+fait que les envoyer en base, il ne calcule rien lui-même.
 """
 
 from datetime import datetime, timezone

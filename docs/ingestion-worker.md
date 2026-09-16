@@ -20,10 +20,9 @@ La publication d'alertes (Redis Streams) reste hors périmètre.
 
 Une lecture `critical` (tous les capteurs en panne, tout est `null`) suit
 exactement le même chemin en écriture brute — rien n'est filtré ni
-corrigé côté MinIO (voir [DATA-02 / issue #16](../packages/mockapi-client)
-pour cet invariant lecture-seule). Seul `consumption_kwh` est
-éventuellement comblé côté `readings_curated`, tous les autres champs y
-gardent leur valeur brute telle quelle, `None` inclus.
+corrigé côté MinIO. Seul `consumption_kwh` est éventuellement comblé
+côté `readings_curated`, tous les autres champs y gardent leur valeur
+brute telle quelle, `None` inclus.
 
 ## Stratégie d'imputation
 

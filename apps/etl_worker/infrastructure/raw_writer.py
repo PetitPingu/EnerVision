@@ -1,20 +1,17 @@
 """Écrit le JSON brut de chaque lecture dans le bucket raw.
 
-Chemin objet : {site_id}/{YYYY}/{MM}/{DD}/{HH}/{MM_minutes}.json —
-partitionné par site d'abord, puis par heure (convention Hive). Adapté à
-un usage "historique par site" (creuser un incident sur un site donné) ;
-le bucket sert d'archive brute, il n'est pas relu automatiquement par le
-worker (l'insertion en base se fait depuis la lecture déjà en mémoire).
+Chemin de l'objet : `{site_id}/{YYYY}/{MM}/{DD}/{HH}/{minutes}.json` —
+d'abord classé par site, puis par heure. Pratique pour retrouver tout
+l'historique d'un site donné.
 
-Le nom de fichier ne garde que les minutes : plus compact, mais moins
-unique que l'horodatage complet — deux écritures du même site dans la
-même minute s'écraseraient (peu probable au rythme d'un cycle par
-minute, mais possible si le worker redémarre au mauvais moment).
-
-L'arborescence utilise l'heure locale (Europe/Paris, DST géré
-automatiquement), fixée explicitement plutôt que de dépendre du fuseau
-système : un conteneur Docker est en UTC par défaut, quel que soit le
-fuseau de la machine hôte.
+Deux détails à connaître :
+- Le nom de fichier ne garde que les minutes, pas les secondes. Si le
+  worker écrivait deux fois pour le même site dans la même minute, la
+  deuxième écraserait la première (n'arrive pas en usage normal, à un
+  cycle par minute).
+- L'heure utilisée est celle d'Europe/Paris, fixée explicitement — un
+  conteneur Docker tourne en UTC par défaut, peu importe le fuseau de
+  la machine hôte.
 """
 
 from datetime import datetime, timezone

@@ -15,9 +15,9 @@ load_dotenv(find_dotenv(usecwd=True))
 class Config:
     """Paramètres de connexion aux services d'infrastructure du worker."""
 
-    # Utilisée par CuratedWriter (readings_curated). Dialecte +psycopg
-    # explicite : le driver sync/async partagé par db-schema est psycopg
-    # (v3), pas psycopg2 (voir db_schema.config).
+    # Utilisée par CuratedWriter pour écrire dans readings_curated.
+    # +psycopg est nécessaire : c'est le driver (v3) partagé avec
+    # db-schema, pas l'ancien psycopg2.
     DATABASE_URL = os.environ.get(
         "DATABASE_URL", "postgresql+psycopg://enervision:changeme@localhost:5432/enervision"
     )
