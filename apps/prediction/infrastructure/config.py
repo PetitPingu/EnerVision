@@ -25,7 +25,7 @@ class Config:
     TRAINING_DATA_SOURCE = os.environ.get("TRAINING_DATA_SOURCE", "mock")
     TRAINING_DATA_JSON_PATH = os.environ.get("TRAINING_DATA_JSON_PATH", "")
 
-    # minio : artifact store des modèles (bucket models)
+    # MinIO — mêmes variables d'environnement que l'ETL (voir .env racine).
     MODEL_STORE = os.environ.get("MODEL_STORE", "minio")
     MODEL_NAME = os.environ.get("MODEL_NAME", "energy-consumption")
     MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")

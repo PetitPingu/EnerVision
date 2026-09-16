@@ -122,7 +122,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_MODELS_BUCKET: models
+      MINIO_MODELS_BUCKET: ${MINIO_MODELS_BUCKET:-models}
     depends_on:
       postgres:
         condition: service_healthy
