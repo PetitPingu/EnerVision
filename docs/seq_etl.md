@@ -1,31 +1,37 @@
 ## Diagramme de séquence du Worker ETL
 
-### Ingestion des données brutes
+Implémenté dans `apps/etl_worker` : un seul job planifié (`EtlJob`,
+`application/etl_job.py`), toutes les minutes. Pas de job séparé pour la
+transformation — ingestion et curation se font dans le même passage,
+lecture par lecture, sans jamais relire MinIO après coup.
 
-Implémenté dans `apps/etl_worker` : ce worker se limite à l'ingestion —
-récupérer les dernières lectures et les déposer brutes dans MinIO.
-L'insertion en base (`consumption_readings`) et la détection d'alerte
-Redis sont traitées dans une branche séparée dédiée à la transformation.
-
-#### Mermaid
+### Mermaid
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Cron as Scheduler (cron 1 min)
-    participant Worker as Worker ETL
+    participant Worker as Worker ETL (EtlJob)
     participant Mock as API Mock EnerVision
-    participant MinIO as MinIO (S3)
+    participant MinIO as MinIO (S3, bucket raw)
+    participant Impute as domain/imputation.py<br/>(ConsumptionKwhImputer, en mémoire)
+    participant DB as Postgres (readings_curated)
 
     loop Toutes les minutes
-        Cron->>Worker: Déclenche le job ETL
-        Worker->>Mock: GET /api/v1/readings?start_time={start_date}&end_time={end_date}&limit=7 (dernières données)
+        Cron->>Worker: Déclenche le job
+        Worker->>Mock: GET /api/v1/readings?limit=7 (dernières données)
         Mock-->>Worker: 200 OK + données brutes (JSON)
         loop Pour chaque lecture
             Worker->>MinIO: PUT raw/{site_id}/{YYYY}/{MM}/{DD}/{HH}/{minutes}.json
             MinIO-->>Worker: 200 OK
+            Worker->>Impute: impute(site_id, consumption_kwh)
+            Impute-->>Worker: (valeur retenue, méthode)
         end
+        Worker->>DB: UPSERT readings_curated (7 lignes, site_id + timestamp)
+        DB-->>Worker: OK
+        Note over Worker: Log JSON par lecture, puis un résumé :<br/>% de lectures comblées par site
     end
 
     Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation. Une lecture "critical" suit le même chemin.
+    Note over Impute,DB: Seul consumption_kwh est comblé (forward-fill, dernière valeur<br/>connue du site, mémorisée en RAM). imputation_methods : None (valeur<br/>connue), "forward_fill" (comblée), "no_history" (aucun historique<br/>en mémoire — reste None, ex. juste après un redémarrage du worker).
 ```

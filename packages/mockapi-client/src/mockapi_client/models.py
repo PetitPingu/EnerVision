@@ -5,7 +5,7 @@ n'a de valeur par défaut (un champ absent doit lever une erreur de
 validation, jamais être silencieusement remplacé par 0.0 ou None), et aucun
 validateur ne corrige, n'arrondit ou ne borne une valeur — un validateur
 peut seulement rejeter. L'imputation/le nettoyage vivent dans
-etl/imputation.py (DATA-04), pas ici.
+apps/etl_worker/domain/imputation.py (DATA-04), pas ici.
 """
 
 from typing import Literal
