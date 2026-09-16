@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from application.ports import ModelStorePort, SavedModelMetadata, TrainingDataPort
-from infrastructure.minio_model_store import utc_version_timestamp
+from infrastructure.model_store import utc_version_timestamp
 from infrastructure.ml.features import FEATURE_COLUMNS
 from infrastructure.ml.trainer import TrainingResult, train_model
 

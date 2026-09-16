@@ -1,7 +1,7 @@
 """Script manuel : Postgres -> entrainement -> MinIO (bucket models).
 
 Usage (depuis apps/prediction) :
-    python tests/manual_train_and_publish.py
+    python tests/manual/manual_train_and_publish.py
 
 Variables d'environnement : DATABASE_URL, MINIO_* (voir .env a la racine).
 """
@@ -9,12 +9,12 @@ Variables d'environnement : DATABASE_URL, MINIO_* (voir .env a la racine).
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from application.train_and_publish import train_and_publish
 from infrastructure.config import Config
-from infrastructure.model_store_factory import create_model_store
-from infrastructure.training_data_factory import create_training_data_reader
+from infrastructure.model_store import create_model_store
+from infrastructure.training_data import create_training_data_reader
 
 
 def main() -> None:

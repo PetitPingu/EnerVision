@@ -2,7 +2,7 @@
 
 from application.ports import ModelStorePort
 from infrastructure.config import Config
-from infrastructure.minio_model_store import MinioModelStore
+from infrastructure.model_store.minio_store import MinioModelStore
 
 
 def create_model_store() -> ModelStorePort:

@@ -2,9 +2,9 @@
 
 from application.ports import TrainingDataPort
 from infrastructure.config import Config
-from infrastructure.json_file_training_data_reader import JsonFileTrainingDataReader
-from infrastructure.mock_training_data_reader import MockTrainingDataReader
-from infrastructure.postgres_training_data_reader import PostgresTrainingDataReader
+from infrastructure.training_data.json_file_reader import JsonFileTrainingDataReader
+from infrastructure.training_data.mock_reader import MockTrainingDataReader
+from infrastructure.training_data.postgres_reader import PostgresTrainingDataReader
 
 
 def create_training_data_reader() -> TrainingDataPort:

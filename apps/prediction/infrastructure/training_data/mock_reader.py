@@ -1,7 +1,7 @@
 """Lecteur mock des données d'entraînement (en attendant Postgres).
 
-Simule le résultat d'une requête SQL sur consumption_readings
-(data_quality='good', colonnes site_id / timestamp / consumption_kwh).
+Simule le résultat d'une requête SQL sur readings_curated
+(colonnes site_id / timestamp / consumption_kwh).
 """
 
 import pandas as pd
