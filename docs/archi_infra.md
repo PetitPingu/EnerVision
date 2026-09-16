@@ -7,14 +7,15 @@ Le système est déployé sur une seule VM on-premise mise à disposition par l'
 Core API (FastAPI) - point d'entrée pour le dashboard, agrège les appels vers Prediction et Recommendation.
 Recommendation (FastAPI) - règles à seuils, consomme les prédictions.
 Prediction (FastAPI) - sert le modèle prédictif, expose la route /predict qui lit un modèle gardé en mémoire (rechargé toutes les 24h). Un cron interne (APScheduler) réentraîne le modèle sur l'historique Postgres, log le run et enregistre le modèle dans MLflow, puis recharge la version "Production" en mémoire.
-Worker ETL (async) - au lieu d'un déclenchement externe managé par le cloud, c'est un processus qui tourne en continu dans son propre conteneur et interroge l'API mock à intervalle régulier pour ingérer, transformer et charger les données. Il n'expose pas d'endpoint HTTP - ce n'est pas une API, c'est un worker.
+Worker ETL (async) - au lieu d'un déclenchement externe managé par le cloud, c'est un processus qui tourne en continu dans son propre conteneur, avec un seul job planifié (APScheduler interne, toutes les 60s) qui ingère les dernières lectures et les dépose brutes dans le bucket `raw` — voir [seq_etl.md](seq_etl.md). Le chargement en base (`consumption_readings`) et la détection d'alertes sont traités dans une branche séparée. Il n'expose pas d'endpoint HTTP - ce n'est pas une API, c'est un worker.
 MLflow (Tracking + Model Registry) - trace les entraînements (paramètres, métriques) et versionne les modèles produits par Prediction ; interrogé uniquement par ce dernier, avec une UI exposée pour le suivi et la démonstration.
 Dashboard (Next.js/React).
 
 ### Stockage :
 
 PostgreSQL pour les données structurées (sites, relevés, prédictions, recommandations) et pour le backend store de MLflow (runs, métriques, registre des versions) dans un schéma dédié - pas de base supplémentaire à opérer.
-MinIO pour le data lake brut et pour l'artifact store de MLflow (fichiers de modèles entraînés) - équivalent S3 auto-hébergé, API compatible S3 donc le code d'accès (SDK boto3 côté Python) ne change pas si un jour on migre vers un vrai S3.
+MinIO pour le data lake brut (bucket `raw`, un fichier JSON par lecture, jamais écrasé) et pour l'artifact store de MLflow (fichiers de modèles entraînés) - équivalent S3 auto-hébergé, API compatible S3 donc le code d'accès (SDK boto3 côté Python) ne change pas si un jour on migre vers un vrai S3.
+Redis (Streams) *(prévu, pas encore câblé)* pour la détection d'alertes en quasi temps réel : le worker de transformation (branche séparée) publiera un événement `alert.detected` par lecture `critical`.
 
 Secrets : pas de Secrets Manager. En local, chaque service lit un .env (jamais commité, .env.example versionné pour le contenu attendu). En "prod" (la VM école), les valeurs sont stockées comme GitHub Secrets et injectées via le pipeline CI/CD au moment du déploiement SSH - donc aucun secret ne transite ni ne reste en clair sur la VM en dehors du .env généré au déploiement. Les identifiants MinIO/Postgres utilisés par MLflow suivent le même mécanisme, aucune gestion de secrets distincte à mettre en place.
 
@@ -36,7 +37,8 @@ flowchart TB
             Etl["Worker ETL (async, remplace EventBridge)"]
             MLflow["MLflow (Tracking + Registry)"]
             PG[("PostgreSQL - donnees structurees + backend store MLflow")]
-            Minio[("MinIO - data lake brut + artifact store MLflow (S3-compatible)")]
+            Minio[("MinIO - bucket raw + artifact store MLflow (S3-compatible)")]
+            Redis[("Redis Streams - alert.detected")]
         end
     end
  
@@ -55,6 +57,7 @@ flowchart TB
     Etl --> PG
     Etl --> Minio
     Etl --> Mock
+    Etl -. "XADD alert.detected (prevu)" .-> Redis
     CI -. "deploie via SSH + injecte .env (GitHub Secrets)" .-> VM
  
     style Net fill:#f5f7fa,stroke:#4a5568,stroke-width:1px

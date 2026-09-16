@@ -2,6 +2,11 @@
 
 ### Ingestion des données brutes
 
+Implémenté dans `apps/etl_worker` : ce worker se limite à l'ingestion —
+récupérer les dernières lectures et les déposer brutes dans MinIO.
+L'insertion en base (`consumption_readings`) et la détection d'alerte
+Redis sont traitées dans une branche séparée dédiée à la transformation.
+
 #### Mermaid
 
 ```mermaid
@@ -11,40 +16,16 @@ sequenceDiagram
     participant Worker as Worker ETL
     participant Mock as API Mock EnerVision
     participant MinIO as MinIO (S3)
- 
+
     loop Toutes les minutes
         Cron->>Worker: Déclenche le job ETL
         Worker->>Mock: GET /api/v1/readings?start_time={start_date}&end_time={end_date}&limit=7 (dernières données)
         Mock-->>Worker: 200 OK + données brutes (JSON)
-        Worker->>MinIO: PUT raw/{date}/{site_id}.json
-        MinIO-->>Worker: 200 OK
-    end
- 
-    Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation
-```
-
-### Transformation des données brutes
-
-#### Mermaid
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Cron as Scheduler (cron 1h)
-    participant Worker as Worker ETL
-    participant MinIO as MinIO (S3)
-    participant PG as PostgreSQL
- 
-    loop Toutes les heures
-        Cron->>Worker: Déclenche le job de transformation
-        Worker->>MinIO: GET raw/{date}/*.json (données brutes en attente)
-        MinIO-->>Worker: Fichiers bruts
-        Worker->>Worker: Parsing / validation / transformation
-        alt Données valides
-            Worker->>PG: INSERT INTO consumption_readings
-            PG-->>Worker: OK
-        else Données invalides
-            Worker->>Worker: Log erreur + skip
+        loop Pour chaque lecture
+            Worker->>MinIO: PUT raw/{site_id}/{YYYY}/{MM}/{DD}/{HH}/{minutes}.json
+            MinIO-->>Worker: 200 OK
         end
     end
+
+    Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation. Une lecture "critical" suit le même chemin.
 ```

@@ -27,7 +27,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - enervision-net
     healthcheck:
@@ -55,6 +54,21 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - enervision-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   minio-init:
     image: quay.io/minio/mc:latest
     depends_on:
@@ -78,7 +92,7 @@ services:
       context: .
       dockerfile: apps/core_api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000
       RECOMMENDATION_URL: http://recommendation:8000
     depends_on:
@@ -128,11 +142,23 @@ services:
       context: .
       dockerfile: apps/etl_worker/Dockerfile
     environment:
+      # Pas encore utilisée par ce worker (ingestion uniquement) : préparée
+      # pour la branche de transformation.
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      MOCK_API_URL: ${MOCK_API_URL}
+      ENERVISION_API_SCHEME: ${ENERVISION_API_SCHEME:-http}
+      ENERVISION_API_HOST: ${ENERVISION_API_HOST}
+      ENERVISION_API_PORT: ${ENERVISION_API_PORT}
+      ENERVISION_API_USERNAME: ${ENERVISION_API_USERNAME}
+      ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET:-raw}
       ETL_POLL_INTERVAL_SECONDS: ${ETL_POLL_INTERVAL_SECONDS:-60}
     depends_on:
       postgres:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks:
       - enervision-net
@@ -144,3 +170,4 @@ networks:
 volumes:
   postgres-data:
   minio-data:
+  redis-data:
