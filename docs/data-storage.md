@@ -43,10 +43,12 @@ ports sont configurables via le fichier `.env` (voir `.env.example`).
   `postgres:16-alpine`) pour que l'extension `timescaledb` soit disponible ;
   le nom du service reste `postgres` pour ne pas casser les références des
   autres services (`core_api`, `prediction`, `recommendation`, `etl_worker`).
-- L'extension `timescaledb` et le schéma `enervision` sont créés
-  automatiquement au premier démarrage via [`db/init/001-init-timescaledb.sql`](../db/init/001-init-timescaledb.sql).
-- La création des tables/hypertables applicatives se fera dans des
-  migrations dédiées, hors périmètre de ce socle.
+- L'extension `timescaledb` et le schéma `enervision`, ainsi que toutes
+  les tables applicatives, sont créés par les migrations Alembic du
+  package partagé `packages/db-schema/` (indépendant de toute app),
+  appliquées automatiquement au démarrage de `core_api`
+  (`alembic -c /packages/db-schema/alembic.ini upgrade head`) — mais
+  applicables par n'importe quel autre service de la même façon.
 - Connexion : `psql postgresql://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:<POSTGRES_PORT>/<POSTGRES_DB>`
 
 ## MinIO

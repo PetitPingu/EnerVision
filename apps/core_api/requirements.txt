@@ -2,9 +2,7 @@
 # (cd apps/core_api && pip install -r requirements.txt) : un futur Dockerfile
 # doit préserver la même profondeur relative apps/core_api <-> packages/.
 -e ../../packages/mockapi-client
+-e ../../packages/db-schema
 python-dotenv>=1.0
 fastapi>=0.110
 uvicorn[standard]>=0.29
-sqlalchemy>=2.0
-psycopg[binary]>=3.1
-alembic>=1.13

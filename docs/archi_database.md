@@ -1,16 +1,28 @@
 ## 2. Schéma de la base de données postgres
 
-5 tables, UUID en clé primaire partout (plus simple à générer côté application que des séquences, et ça évite de fuiter le volume de données via des IDs séquentiels si l'API est un jour publique).
+Les tables ci-dessous existent réellement (schéma `enervision`, toutes
+créées via Alembic — voir `packages/db-schema/alembic/versions/`, un
+package partagé indépendant de toute app, installable par `core_api`,
+`etl_worker` ou n'importe quel autre service) : clé naturelle `site_id`
+(text, l'identifiant renvoyé par l'API mock, ex. `SITE001`), pas d'UUID —
+plus simple à corréler directement avec les payloads de l'API et les
+objets MinIO sans jointure supplémentaire. `USERS`, `PREDICTIONS` et
+`RECOMMENDATIONS` restent des propositions non implémentées, à confirmer
+avec l'équipe.
 
-USERS — table d'authentification, volontairement isolée du reste : email (unique), password_hash (jamais le mot de passe en clair, bcrypt/argon2 côté FastAPI), role (ex. admin/viewer). Elle ne référence aucune autre table — c'est l'hypothèse que je veux qu'on confirme ensemble ci-dessous.
+SITES — les entités métier de base, telles que renvoyées par l'API mock : nom, type, capacité, localisation, statut.
 
-SITES — les entités métier de base : nom, capacité, région. Point d'ancrage pour tout le reste.
+CONSUMPTION_READINGS — table alimentée par le job de transformation horaire du Worker ETL (issue #19, voir [seq_etl.md](seq_etl.md)) : une ligne par lecture transformée depuis le bucket MinIO `raw`, clé primaire naturelle `(site_id, timestamp)` qui porte l'idempotence (`ON CONFLICT DO NOTHING`). C'est une hypertable TimescaleDB. Aucune donnée n'y est corrigée ou filtrée — y compris les lectures `critical` (tous les champs de mesure `null`). Pas de clé étrangère vers SITES (site_id est un simple champ texte, non contraint).
 
-CONSUMPTION_READINGS — les relevés bruts ingérés par le Worker ETL, avec consumption_kw nullable et data_quality (good/degraded/critical) pour refléter fidèlement ce que renvoie le mock, sans perdre l'information de dégradation.
+READINGS — table structurée destinée à être servie par core_api (alimentation à définir, hors périmètre de l'issue #19). Même forme que CONSUMPTION_READINGS, mais avec clé étrangère vers SITES.
 
-PREDICTIONS — écrites par le worker/service Prediction toutes les 24h, avec model_version pour pouvoir tracer quelle version du modèle a produit quelle prédiction si vous voulez comparer plus tard.
+ALERTS — alertes de consommation relayées depuis l'API mock (voir `GET /api/v1/alerts`), rattachées à un site.
 
-RECOMMENDATIONS — prediction_id est nullable parce qu'une recommandation peut aussi naître d'un état courant critique sans passer par une prédiction (ex. data_quality: critical détecté en direct) — pas seulement d'un pic anticipé.
+PREDICTIONS *(proposé)* — écrites par le worker/service Prediction toutes les 24h, avec model_version pour pouvoir tracer quelle version du modèle a produit quelle prédiction si vous voulez comparer plus tard.
+
+RECOMMENDATIONS *(proposé)* — prediction_id est nullable parce qu'une recommandation peut aussi naître d'un état courant critique sans passer par une prédiction (ex. data_quality: critical détecté en direct) — pas seulement d'un pic anticipé.
+
+USERS *(proposé)* — table d'authentification, volontairement isolée du reste : email (unique), password_hash (jamais le mot de passe en clair, bcrypt/argon2 côté FastAPI), role (ex. admin/viewer). Elle ne référence aucune autre table — c'est l'hypothèse que je veux qu'on confirme ensemble.
 
 #### Mermaid
 
@@ -24,43 +36,78 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
- 
+
     SITES {
-        uuid id PK
-        varchar name
+        varchar site_id PK
+        varchar site_name
+        varchar site_type
+        varchar location
         float capacity_kw
-        varchar region
-        timestamptz created_at
+        varchar status
     }
- 
+
     CONSUMPTION_READINGS {
-        uuid id PK
-        uuid site_id FK
-        timestamptz reading_timestamp
+        varchar site_id PK "pas de FK vers SITES"
+        timestamptz timestamp PK
+        varchar site_type
         float consumption_kw "nullable"
-        varchar data_quality "good | degraded | critical"
-        timestamptz created_at
+        float consumption_kwh "nullable"
+        float voltage_v "nullable"
+        float current_a "nullable"
+        float power_factor "nullable"
+        float temperature_celsius "nullable"
+        float humidity_percent "nullable"
+        text_array null_reasons
+        varchar data_quality "good | partial | degraded | critical"
+        timestamptz ingested_at
     }
- 
+
+    READINGS {
+        varchar site_id PK_FK
+        timestamptz timestamp PK
+        varchar site_type
+        float consumption_kw "nullable"
+        float consumption_kwh "nullable"
+        float voltage_v "nullable"
+        float current_a "nullable"
+        float power_factor "nullable"
+        float temperature_celsius "nullable"
+        float humidity_percent "nullable"
+        text_array null_reasons
+        varchar data_quality
+    }
+
+    ALERTS {
+        varchar alert_id PK
+        timestamptz timestamp
+        varchar site_id FK
+        varchar severity
+        varchar type
+        text message
+        float value "nullable"
+        float threshold
+    }
+
     PREDICTIONS {
         uuid id PK
-        uuid site_id FK
+        varchar site_id FK
         timestamptz target_timestamp
         float predicted_consumption_kw
         varchar model_version "version du Model Registry MLflow"
         timestamptz generated_at
     }
- 
+
     RECOMMENDATIONS {
         uuid id PK
-        uuid site_id FK
+        varchar site_id FK
         uuid prediction_id FK "nullable"
         varchar type "load_shedding | load_smoothing | maintenance_alert"
         text message
         timestamptz created_at
     }
- 
-    SITES ||--o{ CONSUMPTION_READINGS : "mesure"
+
+    SITES ||--o{ READINGS : "mesure"
+    SITES ||--o{ ALERTS : "concerne"
     SITES ||--o{ PREDICTIONS : "anticipe"
     SITES ||--o{ RECOMMENDATIONS : "recoit"
     PREDICTIONS |o--o| RECOMMENDATIONS : "declenche"
