@@ -24,3 +24,12 @@ class Config:
     # mock : données synthétiques | json : fichier local | postgres : readings_curated
     TRAINING_DATA_SOURCE = os.environ.get("TRAINING_DATA_SOURCE", "mock")
     TRAINING_DATA_JSON_PATH = os.environ.get("TRAINING_DATA_JSON_PATH", "")
+
+    # minio : artifact store des modèles (bucket models)
+    MODEL_STORE = os.environ.get("MODEL_STORE", "minio")
+    MODEL_NAME = os.environ.get("MODEL_NAME", "energy-consumption")
+    MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
+    MINIO_ACCESS_KEY = os.environ.get("MINIO_ROOT_USER", "enervision")
+    MINIO_SECRET_KEY = os.environ.get("MINIO_ROOT_PASSWORD", "changeme123")
+    MINIO_MODELS_BUCKET = os.environ.get("MINIO_MODELS_BUCKET", "models")
+    MINIO_SECURE = os.environ.get("MINIO_SECURE", "false").lower() == "true"
