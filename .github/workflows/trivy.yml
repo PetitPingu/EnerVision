@@ -26,8 +26,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 jobs:
   scan-fs:
@@ -56,15 +54,7 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-          format: sarif
-          output: trivy-results.sarif
-
-      - name: Upload results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-fs-${{ matrix.app }}
+          format: table
 
   scan-image:
     name: Scan image - ${{ matrix.app }}
@@ -106,12 +96,4 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-          format: sarif
-          output: trivy-results.sarif
-
-      - name: Upload results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-image-${{ matrix.app }}
+          format: table
