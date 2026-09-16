@@ -46,12 +46,9 @@ services:
       # reste protégé par JWT (comportement par défaut de MinIO). Le token
       # de scrape est généré par le service minio-metrics-token.
     ports:
-      # Bind loopback uniquement : le port sert au workflow dev où
-      # etl_worker tourne hors docker-compose (MINIO_ENDPOINT=localhost:9000
-      # dans apps/etl_worker/.env.example). Les autres containers y accèdent
-      # via le réseau enervision-net, jamais via ce port publié.
       - "127.0.0.1:${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      # Bind loopback : console d'admin MinIO, accès distant via tunnel SSH.
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
     networks:
@@ -120,7 +117,7 @@ services:
       - prometheus-data:/prometheus
       - minio-metrics-token:/etc/prometheus/secrets:ro
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     depends_on:
       traefik:
         condition: service_started
