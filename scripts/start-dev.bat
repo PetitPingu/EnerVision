@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT=%~dp0"
+set "ROOT=%~dp0..\"
 
 echo Demarrage des services EnerVision en mode dev...
 echo.

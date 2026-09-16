@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT=%~dp0"
+set "ROOT=%~dp0..\"
 
 echo Installation des dependances EnerVision...
 echo.
