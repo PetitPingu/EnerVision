@@ -7,9 +7,11 @@ infrastructure (accès DB). Tables créées dans le schéma `enervision`
 qui crée l'extension timescaledb et le schéma avant tout le reste).
 """
 
+import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, ForeignKey, String, func
+from sqlalchemy import ARRAY, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -73,3 +75,27 @@ class ConsumptionReading(Base):
     null_reasons: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     data_quality: Mapped[str | None]
     ingested_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class Recommendation(Base):
+    """Conseil généré par le service Recommandation pour un site
+    (voir docs/seq_predict_call.md, "Appel au Service Recommandation").
+
+    Pas de clé étrangère vers une table `predictions` : elle n'existe pas
+    encore (voir docs/archi_database.md, PREDICTIONS reste "proposé").
+    prediction_id reste nullable pour ne pas bloquer sur cette dépendance —
+    une recommandation peut de toute façon naître d'un état courant
+    critique, sans prédiction.
+    """
+
+    __tablename__ = "recommendations"
+    __table_args__ = {"schema": "enervision"}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    site_id: Mapped[str] = mapped_column(ForeignKey("enervision.sites.site_id"))
+    prediction_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    type: Mapped[str]
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    site: Mapped["Site"] = relationship()
