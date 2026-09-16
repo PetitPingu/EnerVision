@@ -9,6 +9,8 @@ on:
       - "apps/core_api/**"
       - "apps/dashboard/**"
       - "apps/etl_worker/**"
+      - "apps/prediction/**"
+      - "apps/recommendation/**"
       - ".github/workflows/trivy.yml"
   pull_request:
     branches:
@@ -22,6 +24,8 @@ on:
       - "apps/core_api/**"
       - "apps/dashboard/**"
       - "apps/etl_worker/**"
+      - "apps/prediction/**"
+      - "apps/recommendation/**"
       - ".github/workflows/trivy.yml"
 
 permissions:
@@ -41,6 +45,8 @@ jobs:
           - core_api
           - dashboard
           - etl_worker
+          - prediction
+          - recommendation
 
     steps:
       - name: Checkout
