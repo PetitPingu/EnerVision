@@ -3,7 +3,8 @@
 Seul module du projet autorisé à appeler `requests` vers l'API Mock : toute
 lecture de données capteurs (sites, relevés, alertes, état des capteurs)
 doit passer par ici. Ce module lit ; il ne corrige, ne complète ni ne
-filtre rien — cette logique vit dans etl/imputation.py (DATA-04). Une
+filtre rien — cette logique vit dans apps/etl_worker/domain/imputation.py
+(DATA-04). Une
 erreur d'appel est toujours remontée sous une exception dédiée
 (voir exceptions.py), jamais absorbée en valeur par défaut.
 """

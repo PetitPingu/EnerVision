@@ -1,45 +1,50 @@
-"""Cas d'usage : ingestion périodique des dernières lectures (docs/seq_etl.md).
+"""Cas d'usage : ingestion et curation des dernières lectures, en un seul
+passage (docs/seq_etl.md).
 
 Un seul appel GET /api/v1/readings par cycle (limit=7 : une lecture par
-site), écrite telle quelle dans le bucket raw. Aucune transformation,
-aucun filtrage — y compris une lecture "critical" (tous les champs de
-mesure null), écrite comme n'importe quelle autre (invariant
-lecture-seule de DATA-02 / issue #16).
-
-L'insertion en base (consumption_readings) et la détection d'alerte
-Redis sont hors périmètre de ce job : elles vivent dans une branche
-séparée dédiée à la transformation.
+site). Chaque lecture est d'abord déposée telle quelle dans le bucket
+raw (traçabilité — aucune transformation, aucun filtrage, y compris une
+lecture "critical", invariant lecture-seule de DATA-02 / issue #16),
+puis immédiatement comblée si consumption_kwh est manquant
+(domain/imputation.py : reprend la dernière valeur connue du site, en
+mémoire) et upsert dans readings_curated.
 """
 
 import json
 import logging
 from datetime import datetime, timedelta, timezone
 
+from domain.imputation import ConsumptionKwhImputer
 from ingestion import MockApiClient, MockApiError
 from mockapi_client import EnergyReading
 
+from infrastructure.curated_writer import CuratedWriter
 from infrastructure.raw_writer import RawWriter
 
 logger = logging.getLogger(__name__)
 
 
 class EtlJob:
-    """Récupère les dernières lectures et les dépose dans le bucket raw."""
+    """Récupère les dernières lectures, les dépose dans raw, et les cure."""
 
     def __init__(
         self,
         api_client: MockApiClient | None = None,
         raw_writer: RawWriter | None = None,
+        curated_writer: CuratedWriter | None = None,
+        imputer: ConsumptionKwhImputer | None = None,
         window_seconds: int = 60,
         limit: int = 7,
     ):
         self.api_client = api_client or MockApiClient()
         self.raw_writer = raw_writer or RawWriter()
+        self.curated_writer = curated_writer or CuratedWriter()
+        self.imputer = imputer or ConsumptionKwhImputer()
         self.window_seconds = window_seconds
         self.limit = limit
 
     def run(self) -> None:
-        """Récupère les dernières lectures et les écrit dans le bucket raw."""
+        """Récupère les dernières lectures, les écrit dans raw, puis cure."""
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(seconds=self.window_seconds)
 
@@ -51,10 +56,20 @@ class EtlJob:
             self._log(site=None, status="error", data_quality=None, error=str(exc))
             return
 
-        for reading in readings:
-            self._process(reading)
+        curated_rows = [row for reading in readings if (row := self._process(reading)) is not None]
 
-    def _process(self, reading: EnergyReading) -> None:
+        if not curated_rows:
+            return
+
+        try:
+            self.curated_writer.upsert_many(curated_rows)
+        except Exception as exc:  # noqa: BLE001 - panne Postgres : on logge, le cycle continue
+            self._log(site=None, status="curated_write_error", data_quality=None, error=str(exc))
+            return
+
+        self._log(site=None, status="curated", data_quality=None, written=len(curated_rows))
+
+    def _process(self, reading: EnergyReading) -> dict | None:
         try:
             object_key = self.raw_writer.write(
                 site_id=reading.site_id,
@@ -65,9 +80,35 @@ class EtlJob:
             self._log(
                 reading.site_id, status="raw_write_error", data_quality=reading.data_quality, error=str(exc)
             )
-            return
+            return None
 
-        self._log(reading.site_id, status="written", data_quality=reading.data_quality, object_key=object_key)
+        consumption_kwh, imputation_method = self.imputer.impute(
+            reading.site_id, reading.consumption_kwh
+        )
+
+        self._log(
+            reading.site_id,
+            status="written",
+            data_quality=reading.data_quality,
+            object_key=object_key,
+            imputation_method=imputation_method,
+        )
+
+        return {
+            "site_id": reading.site_id,
+            "timestamp": reading.timestamp,
+            "site_type": reading.site_type,
+            "consumption_kw": reading.consumption_kw,
+            "consumption_kwh": consumption_kwh,
+            "voltage_v": reading.voltage_v,
+            "current_a": reading.current_a,
+            "power_factor": reading.power_factor,
+            "temperature_celsius": reading.temperature_celsius,
+            "humidity_percent": reading.humidity_percent,
+            "null_reasons": reading.null_reasons,
+            "data_quality": reading.data_quality,
+            "imputation_methods": imputation_method,
+        }
 
     @staticmethod
     def _log(site, status, data_quality, **extra) -> None:
