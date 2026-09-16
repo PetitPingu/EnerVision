@@ -1,7 +1,14 @@
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
+
+if sys.platform == "win32":
+    # psycopg (mode async) ne supporte pas la boucle Proactor, celle par
+    # défaut d'asyncio sous Windows : cf.
+    # https://www.psycopg.org/psycopg3/docs/advanced/async.html#async-and-windows
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 

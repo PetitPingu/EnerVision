@@ -9,6 +9,7 @@ def test_registers_one_table_per_entity_in_the_enervision_schema():
         "enervision.sites",
         "enervision.alerts",
         "enervision.consumption_readings",
+        "enervision.readings_curated",
     }
     assert all(table.schema == "enervision" for table in tables.values())
 
@@ -29,3 +30,18 @@ def test_consumption_readings_primary_key_is_composite_for_hypertable_partitioni
     pk_columns = [c.name for c in orm_models.ConsumptionReading.__table__.primary_key.columns]
 
     assert pk_columns == ["site_id", "timestamp"]
+
+
+def test_readings_curated_primary_key_is_composite_for_hypertable_partitioning():
+    pk_columns = [c.name for c in orm_models.ReadingCurated.__table__.primary_key.columns]
+
+    assert pk_columns == ["site_id", "timestamp"]
+
+
+def test_readings_curated_has_a_single_column_per_measured_field():
+    columns = {c.name for c in orm_models.ReadingCurated.__table__.columns}
+
+    for field in ("consumption_kw", "voltage_v", "temperature_celsius"):
+        assert field in columns
+        assert f"{field}_imputed" not in columns
+    assert "imputation_methods" in columns

@@ -15,10 +15,11 @@ load_dotenv(find_dotenv(usecwd=True))
 class Config:
     """Paramètres de connexion aux services d'infrastructure du worker."""
 
-    # Pas encore utilisée par ce worker (ingestion uniquement) : préparée
-    # pour la branche de transformation, qui insérera dans consumption_readings.
+    # Utilisée par CuratedWriter (readings_curated). Dialecte +psycopg
+    # explicite : le driver sync/async partagé par db-schema est psycopg
+    # (v3), pas psycopg2 (voir db_schema.config).
     DATABASE_URL = os.environ.get(
-        "DATABASE_URL", "postgresql://enervision:changeme@localhost:5432/enervision"
+        "DATABASE_URL", "postgresql+psycopg://enervision:changeme@localhost:5432/enervision"
     )
 
     MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")

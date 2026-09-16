@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 from application.etl_job import EtlJob
+from domain.imputation import ConsumptionKwhImputer
 from mockapi_client import EnergyReading, MockApiTimeoutError
 
 
@@ -41,7 +42,7 @@ def _critical_reading(**overrides) -> EnergyReading:
 
 
 def _job(**overrides):
-    defaults = dict(api_client=Mock(), raw_writer=Mock())
+    defaults = dict(api_client=Mock(), raw_writer=Mock(), curated_writer=Mock())
     defaults.update(overrides)
     job = EtlJob(**defaults)
     job.raw_writer.write.return_value = "SITE001/2026/09/15/17/30.json"
@@ -87,26 +88,31 @@ def test_critical_reading_is_written_like_any_other():
     raw_writer.write.assert_called_once()
 
 
-def test_raw_write_failure_does_not_crash():
+def test_raw_write_failure_excludes_the_reading_but_does_not_crash():
     reading = _reading()
     api_client = Mock()
     api_client.get_readings.return_value = [reading]
     raw_writer = Mock()
     raw_writer.write.side_effect = RuntimeError("minio down")
+    curated_writer = Mock()
 
-    job = _job(api_client=api_client, raw_writer=raw_writer)
+    job = _job(api_client=api_client, raw_writer=raw_writer, curated_writer=curated_writer)
     job.run()  # ne doit pas lever
+
+    curated_writer.upsert_many.assert_not_called()
 
 
 def test_api_error_does_not_crash_and_writes_nothing():
     api_client = Mock()
     api_client.get_readings.side_effect = MockApiTimeoutError("timeout")
     raw_writer = Mock()
+    curated_writer = Mock()
 
-    job = _job(api_client=api_client, raw_writer=raw_writer)
+    job = _job(api_client=api_client, raw_writer=raw_writer, curated_writer=curated_writer)
     job.run()  # ne doit pas lever
 
     raw_writer.write.assert_not_called()
+    curated_writer.upsert_many.assert_not_called()
 
 
 def test_run_processes_all_readings_returned():
@@ -115,8 +121,67 @@ def test_run_processes_all_readings_returned():
     api_client.get_readings.return_value = readings
     raw_writer = Mock()
     raw_writer.write.return_value = "x.json"
+    curated_writer = Mock()
 
-    job = _job(api_client=api_client, raw_writer=raw_writer)
+    job = _job(api_client=api_client, raw_writer=raw_writer, curated_writer=curated_writer)
     job.run()
 
-    assert raw_writer.write.call_count == 7
+    args, _ = curated_writer.upsert_many.call_args
+    assert len(args[0]) == 7
+
+
+def test_curated_write_failure_does_not_crash():
+    api_client = Mock()
+    api_client.get_readings.return_value = [_reading()]
+    curated_writer = Mock()
+    curated_writer.upsert_many.side_effect = RuntimeError("postgres down")
+
+    job = _job(api_client=api_client, curated_writer=curated_writer)
+    job.run()  # ne doit pas lever
+
+
+def test_missing_consumption_kwh_is_forward_filled_from_the_previous_cycle():
+    api_client = Mock()
+    curated_writer = Mock()
+    imputer = ConsumptionKwhImputer()
+    job = _job(api_client=api_client, curated_writer=curated_writer, imputer=imputer)
+
+    api_client.get_readings.return_value = [_reading(consumption_kwh=42.0)]
+    job.run()
+
+    api_client.get_readings.return_value = [
+        _reading(timestamp="2026-09-15T10:01:00", consumption_kwh=None, data_quality="partial")
+    ]
+    job.run()
+
+    args, _ = curated_writer.upsert_many.call_args
+    curated_row = args[0][0]
+    assert curated_row["consumption_kwh"] == 42.0
+    assert curated_row["imputation_methods"] == "forward_fill"
+
+
+def test_missing_consumption_kwh_with_no_prior_reading_stays_none_with_no_history():
+    api_client = Mock()
+    api_client.get_readings.return_value = [_reading(consumption_kwh=None, data_quality="partial")]
+    curated_writer = Mock()
+
+    job = _job(api_client=api_client, curated_writer=curated_writer)
+    job.run()
+
+    args, _ = curated_writer.upsert_many.call_args
+    curated_row = args[0][0]
+    assert curated_row["consumption_kwh"] is None
+    assert curated_row["imputation_methods"] == "no_history"
+
+
+def test_known_consumption_kwh_has_no_imputation_method():
+    api_client = Mock()
+    api_client.get_readings.return_value = [_reading(consumption_kwh=42.0)]
+    curated_writer = Mock()
+
+    job = _job(api_client=api_client, curated_writer=curated_writer)
+    job.run()
+
+    args, _ = curated_writer.upsert_many.call_args
+    curated_row = args[0][0]
+    assert curated_row["imputation_methods"] is None
