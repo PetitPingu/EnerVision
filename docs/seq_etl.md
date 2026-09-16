@@ -29,9 +29,7 @@ sequenceDiagram
         end
         Worker->>DB: UPSERT readings_curated (7 lignes, site_id + timestamp)
         DB-->>Worker: OK
-        Note over Worker: Log JSON par lecture, puis un résumé du nombre de lignes écrites
     end
 
-    Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation. Une lecture "critical" suit le même chemin.
-    Note over Impute,DB: Seul consumption_kwh est comblé (forward-fill, dernière valeur<br/>connue du site, mémorisée en RAM). imputation_methods : None (valeur<br/>connue), "forward_fill" (comblée), "no_history" (aucun historique<br/>en mémoire — reste None, ex. juste après un redémarrage du worker).
+    Note over Worker,MinIO: Données brutes conservées telles quelles (traçabilité),<br/>avant toute transformation. Toutes les valeurs exceptées good suivent le même chemin.
 ```
