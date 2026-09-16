@@ -12,9 +12,7 @@ avec l'équipe.
 
 SITES — les entités métier de base, telles que renvoyées par l'API mock : nom, type, capacité, localisation, statut.
 
-CONSUMPTION_READINGS — table alimentée par le job de transformation horaire du Worker ETL (issue #19, voir [seq_etl.md](seq_etl.md)) : une ligne par lecture transformée depuis le bucket MinIO `raw`, clé primaire naturelle `(site_id, timestamp)` qui porte l'idempotence (`ON CONFLICT DO NOTHING`). C'est une hypertable TimescaleDB. Aucune donnée n'y est corrigée ou filtrée — y compris les lectures `critical` (tous les champs de mesure `null`). Pas de clé étrangère vers SITES (site_id est un simple champ texte, non contraint).
-
-READINGS — table structurée destinée à être servie par core_api (alimentation à définir, hors périmètre de l'issue #19). Même forme que CONSUMPTION_READINGS, mais avec clé étrangère vers SITES.
+READINGS_CURATED — table alimentée par le Worker ETL (voir [seq_etl.md](seq_etl.md)) : une ligne par lecture, upsert sur la clé naturelle `(site_id, timestamp)`. C'est une hypertable TimescaleDB. Une seule colonne par champ de mesure (sa valeur finale) — pas de colonne brute séparée. Seul `consumption_kwh` est éventuellement comblé par forward-fill si manquant (`imputation_methods` indique `null`/`forward_fill`/`no_history`) ; tous les autres champs gardent leur valeur brute telle quelle, `None` inclus. Pas de clé étrangère vers SITES (site_id est un simple champ texte, non contraint).
 
 ALERTS — alertes de consommation relayées depuis l'API mock (voir `GET /api/v1/alerts`), rattachées à un site.
 
@@ -46,35 +44,21 @@ erDiagram
         varchar status
     }
 
-    CONSUMPTION_READINGS {
+    READINGS_CURATED {
         varchar site_id PK "pas de FK vers SITES"
         timestamptz timestamp PK
         varchar site_type
         float consumption_kw "nullable"
-        float consumption_kwh "nullable"
+        float consumption_kwh "nullable, comblé par forward-fill si manquant"
         float voltage_v "nullable"
         float current_a "nullable"
         float power_factor "nullable"
         float temperature_celsius "nullable"
         float humidity_percent "nullable"
+        varchar imputation_methods "null | forward_fill | no_history"
         text_array null_reasons
         varchar data_quality "good | partial | degraded | critical"
-        timestamptz ingested_at
-    }
-
-    READINGS {
-        varchar site_id PK_FK
-        timestamptz timestamp PK
-        varchar site_type
-        float consumption_kw "nullable"
-        float consumption_kwh "nullable"
-        float voltage_v "nullable"
-        float current_a "nullable"
-        float power_factor "nullable"
-        float temperature_celsius "nullable"
-        float humidity_percent "nullable"
-        text_array null_reasons
-        varchar data_quality
+        timestamptz curated_at
     }
 
     ALERTS {
@@ -106,7 +90,7 @@ erDiagram
         timestamptz created_at
     }
 
-    SITES ||--o{ READINGS : "mesure"
+    SITES ||--o{ READINGS_CURATED : "mesure"
     SITES ||--o{ ALERTS : "concerne"
     SITES ||--o{ PREDICTIONS : "anticipe"
     SITES ||--o{ RECOMMENDATIONS : "recoit"

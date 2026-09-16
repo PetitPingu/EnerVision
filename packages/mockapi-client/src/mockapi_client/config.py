@@ -1,9 +1,9 @@
 """Configuration de connexion à l'API Mock EnerVision.
 
-Mêmes variables d'environnement que le reste du projet (ENERVISION_API_HOST,
+Rien n'est codé en dur : l'adresse et les identifiants de l'API mock
+viennent des variables d'environnement (ENERVISION_API_HOST,
 ENERVISION_API_PORT, ENERVISION_API_SCHEME, ENERVISION_API_USERNAME,
-ENERVISION_API_PASSWORD, ENERVISION_REQUEST_TIMEOUT), pour ne pas coder en
-dur l'adresse ni les identifiants de l'API mock fournie par le formateur.
+ENERVISION_API_PASSWORD, ENERVISION_REQUEST_TIMEOUT).
 """
 
 import os
