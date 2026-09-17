@@ -1,5 +1,5 @@
 from .database import AsyncSessionLocal, Base, engine, get_session
-from .models import Alert, ReadingCurated, Site
+from .models import Alert, ReadingCurated, Recommendation, Site
 
 __all__ = [
     "Base",
@@ -9,4 +9,5 @@ __all__ = [
     "Site",
     "Alert",
     "ReadingCurated",
+    "Recommendation",
 ]

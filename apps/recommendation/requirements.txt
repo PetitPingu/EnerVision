@@ -1,0 +1,8 @@
+# Chemin relatif résolu depuis le dossier courant au moment du `pip install`
+# (cd apps/recommendation && pip install -r requirements.txt) : le Dockerfile
+# doit préserver la même profondeur relative apps/recommendation <-> packages/.
+-e ../../packages/db-schema
+python-dotenv>=1.0
+fastapi>=0.110
+uvicorn[standard]>=0.29
+requests>=2.31

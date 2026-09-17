@@ -9,6 +9,7 @@ def test_registers_one_table_per_entity_in_the_enervision_schema():
         "enervision.sites",
         "enervision.alerts",
         "enervision.readings_curated",
+        "enervision.recommendations",
     }
     assert all(table.schema == "enervision" for table in tables.values())
 
@@ -38,3 +39,15 @@ def test_readings_curated_has_a_single_column_per_measured_field():
         assert field in columns
         assert f"{field}_imputed" not in columns
     assert "imputation_methods" in columns
+
+
+def test_recommendations_primary_key_is_id():
+    pk_columns = [c.name for c in orm_models.Recommendation.__table__.primary_key.columns]
+
+    assert pk_columns == ["id"]
+
+
+def test_recommendations_prediction_id_is_nullable():
+    column = orm_models.Recommendation.__table__.columns["prediction_id"]
+
+    assert column.nullable
