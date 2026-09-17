@@ -28,4 +28,6 @@ class ModelStorePort(ABC):
 
     @abstractmethod
     def load_latest(self, model_name: str) -> tuple[Pipeline, SavedModelMetadata]:
-        """Charge le modèle pointé par {model_name}/latest/."""
+        """Charge le dernier modèle entraîné pour {model_name} (implémentation-
+        dépendant : pointeur {model_name}/latest/ pour MinioModelStore, alias
+        de Model Registry pour MlflowModelStore)."""

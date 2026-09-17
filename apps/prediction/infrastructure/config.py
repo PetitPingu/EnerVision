@@ -37,3 +37,8 @@ class Config:
     MAX_PREDICTION_RANGE_MINUTES = int(
         os.environ.get("MAX_PREDICTION_RANGE_MINUTES", str(7 * 24 * 60))
     )
+
+    # MODEL_STORE=mlflow : MLflow parle directement à MinIO (bucket "models",
+    # même instance) via MLFLOW_S3_ENDPOINT_URL/AWS_* - lus par boto3/mlflow
+    # directement depuis l'environnement, pas besoin de les recopier ici.
+    MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
