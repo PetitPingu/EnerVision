@@ -32,7 +32,7 @@ class MlflowModelStore(ModelStorePort):
         self._client = client or MlflowClient(tracking_uri=tracking_uri)
 
     def save(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
-        with mlflow.start_run(run_name=metadata.trained_at) as run:
+        with mlflow.start_run(run_name=metadata.trained_at):
             mlflow.log_params(
                 {
                     "trained_at": metadata.trained_at,
@@ -42,15 +42,18 @@ class MlflowModelStore(ModelStorePort):
                 }
             )
             mlflow.log_metrics({"mae": metadata.mae, "rmse": metadata.rmse})
-            mlflow.sklearn.log_model(pipeline, artifact_path="model")
-            run_id = run.info.run_id
+            
+            model_info = mlflow.sklearn.log_model(
+                pipeline,
+                name="model",
+                registered_model_name=metadata.model_name,
+                skops_trusted_types=["sklearn.tree._tree.Tree"],
+            )
 
-        model_version = mlflow.register_model(
-            model_uri=f"runs:/{run_id}/model", name=metadata.model_name
-        )
-        self._client.set_registered_model_alias(metadata.model_name, _ALIAS, model_version.version)
+        version = model_info.registered_model_version
+        self._client.set_registered_model_alias(metadata.model_name, _ALIAS, version)
 
-        return f"{metadata.model_name}/{model_version.version}"
+        return f"{metadata.model_name}/{version}"
 
     def load_latest(self, model_name: str) -> tuple[Pipeline, SavedModelMetadata]:
         model_version = self._client.get_model_version_by_alias(model_name, _ALIAS)

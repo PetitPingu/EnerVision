@@ -2,6 +2,8 @@
 # Docker buildées séparément à des moments différents - une plage ouverte
 # laisserait le client (apps/prediction/requirements.txt) dériver au-dessus
 # du serveur au prochain rebuild, ce qui casse les appels REST (404).
-mlflow==2.22.5
+# 3.16.1 : 2.22.5 a 18 CVE HIGH/CRITICAL détectées par Trivy en CI (fixées
+# uniquement à partir de 3.x, aucun correctif en branche 2.x).
+mlflow==3.16.1
 psycopg2-binary>=2.9
 boto3>=1.34

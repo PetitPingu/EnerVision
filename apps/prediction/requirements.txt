@@ -11,5 +11,5 @@ minio>=7.2
 # Épinglé exactement comme mlflow/requirements.txt (serveur), pas une plage -
 # deux images buildées séparément, une plage ouverte laisserait le client
 # dériver au-dessus du serveur au prochain rebuild (404 sur les endpoints REST).
-mlflow==2.22.5
+mlflow==3.16.1
 boto3>=1.34

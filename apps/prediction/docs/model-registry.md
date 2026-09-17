@@ -116,6 +116,33 @@ jamais MinIO (lecture seule côté source). Vérifié de bout en bout : un
 modèle entraîné sous `MODEL_STORE=minio` a été importé et rechargé depuis
 MLflow avec des métriques strictement identiques (MAE 32.66, RMSE 37.74).
 
+## Version MLflow : 2.22.5 → 3.16.1
+
+La CI Trivy (`.github/workflows/trivy.yml`, `severity: CRITICAL,HIGH`,
+`exit-code: 1`, aucune exception configurée) a détecté 18 CVE HIGH/CRITICAL
+dans `mlflow==2.22.5`, toutes corrigées uniquement à partir de la branche
+3.x (aucun correctif en 2.x). Épinglé sur `3.16.1` (dernière stable au
+moment du fix) dans `mlflow/requirements.txt` **et**
+`apps/prediction/requirements.txt` (même raison qu'expliqué plus haut :
+client/serveur = deux images buildées séparément, doivent rester
+synchronisées). Deux ruptures de compatibilité rencontrées et corrigées :
+
+- **Protection anti DNS-rebinding** (nouvelle en 3.x, justement pour
+  corriger une des CVE ci-dessus) : le serveur rejette par défaut tout
+  `Host` qui n'est pas `localhost`/IP privée. Le nom DNS interne Docker
+  `mlflow` (utilisé par `prediction` et les scripts manuels) devait être
+  ajouté explicitement via `--allowed-hosts` dans `mlflow/entrypoint.sh`.
+- **Sérialisation skops par défaut** (remplace pickle, plus sûr contre les
+  CVE de désérialisation) : `RandomForestRegressor` contient un type
+  (`sklearn.tree._tree.Tree`) que skops refuse de sérialiser sans
+  confirmation explicite. Déclaré de confiance via `skops_trusted_types`
+  dans `MlflowModelStore.save()` — légitime ici puisqu'on sérialise un
+  modèle qu'on vient d'entraîner nous-mêmes, pas un fichier tiers.
+
+Vérifié après coup : suite de tests (30/30), entraînement réel, `/predict`
+et script de migration, tous revalidés contre `3.16.1`. Trivy relancé
+localement sur `apps/prediction` : 0 vulnérabilité restante.
+
 ## Ce qui n'est pas fait
 
 - Pas de **stages** (`Staging`/`Production`) — seul l'alias `current` existe. `seq_prediction.md` mentionne une transition vers un stage "Production" : pas implémenté ici.

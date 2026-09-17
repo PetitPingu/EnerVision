@@ -19,8 +19,14 @@ EOF
 
 BACKEND_STORE_URI="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?options=-csearch_path%3D${MLFLOW_DB_SCHEMA:-mlflow}"
 
+# Protection anti DNS-rebinding de MLflow 3.x (CVE-2025-14279) : rejette par
+# défaut tout Host qui n'est pas localhost/IP privée - "mlflow" (le nom DNS
+# interne Docker utilisé par les autres conteneurs du réseau) doit être
+# explicitement autorisé, sinon 403 "Invalid Host header" sur chaque appel.
 exec mlflow server \
   --backend-store-uri "$BACKEND_STORE_URI" \
   --default-artifact-root "s3://${MINIO_MODELS_BUCKET:-models}/" \
   --host 0.0.0.0 \
-  --port 5000
+  --port 5000 \
+  --allowed-hosts "mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
+scm-history-item:d%3A%5CWorkspace%5CEnerVision?%7B%22repositoryId%22%3A%22scm0%22%2C%22historyItemId%22%3A%22697dec2badfd65ca85ca575a4c4b194dceda6e2c%22%2C%22historyItemParentId%22%3A%22377efe87b73e363920722395c2fbc5808d583aea%22%2C%22historyItemDisplayId%22%3A%22697dec2%22%7D

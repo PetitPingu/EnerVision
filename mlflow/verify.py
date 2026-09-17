@@ -14,7 +14,7 @@ Usage (depuis la racine du repo, avec mlflow/postgres/minio démarrés) :
       -e AWS_SECRET_ACCESS_KEY=<MINIO_ROOT_PASSWORD> \\
       -e AWS_DEFAULT_REGION=us-east-1 \\
       -v "$(pwd)/mlflow:/verify" -w /verify python:3.12-slim \\
-      sh -c "pip install -q 'mlflow==2.22.5' scikit-learn boto3 && python verify.py"
+      sh -c "pip install -q 'mlflow==3.16.1' scikit-learn boto3 && python verify.py"
 
 Version du client épinglée sur celle installée côté serveur (voir
 mlflow/requirements.txt) : un client plus récent que le serveur peut
