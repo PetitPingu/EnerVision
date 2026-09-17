@@ -68,6 +68,41 @@ def test_load_latest_follows_the_alias_to_the_newest_version(store):
     assert loaded_metadata.trained_at == "2026-09-16T14-30-00Z"
 
 
+def test_get_current_metadata_returns_none_when_nothing_registered(store):
+    assert store.get_current_metadata("energy-consumption") is None
+
+
+def test_get_current_metadata_reflects_the_promoted_champion(store):
+    store.save(_pipeline(), _sample_metadata(mae=20.0))
+
+    metadata = store.get_current_metadata("energy-consumption")
+
+    assert metadata.mae == 20.0
+
+
+def test_register_does_not_move_the_alias(store):
+    store.save(_pipeline(), _sample_metadata(mae=20.0, trained_at="2026-09-15T10-00-00Z"))
+
+    store.register(_pipeline(), _sample_metadata(mae=18.2, trained_at="2026-09-16T14-30-00Z"))
+
+    # Le challenger est enregistre (nouvelle version dans le Registry) mais
+    # n'a pas ete promu : load_latest() suit toujours l'alias sur le champion.
+    _, current = store.load_latest("energy-consumption")
+    assert current.mae == 20.0
+
+
+def test_promote_moves_the_alias_to_the_given_version(store):
+    store.save(_pipeline(), _sample_metadata(mae=20.0, trained_at="2026-09-15T10-00-00Z"))
+    challenger_version = store.register(
+        _pipeline(), _sample_metadata(mae=18.2, trained_at="2026-09-16T14-30-00Z")
+    )
+
+    store.promote("energy-consumption", challenger_version)
+
+    _, current = store.load_latest("energy-consumption")
+    assert current.mae == 18.2
+
+
 def test_models_are_versioned_independently_by_name(store):
     store.save(_pipeline(), _sample_metadata(model_name="site-a-model"))
     store.save(_pipeline(), _sample_metadata(model_name="site-b-model", mae=5.0))

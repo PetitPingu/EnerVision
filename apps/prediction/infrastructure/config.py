@@ -45,3 +45,7 @@ class Config:
     # même instance) via MLFLOW_S3_ENDPOINT_URL/AWS_* - lus par boto3/mlflow
     # directement depuis l'environnement, pas besoin de les recopier ici.
     MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
+
+    # Ré-entraînement planifié (APScheduler, voir main.py) : le candidat
+    # n'est promu que s'il bat le champion actuel (retrain_if_better).
+    RETRAIN_INTERVAL_HOURS = int(os.environ.get("RETRAIN_INTERVAL_HOURS", "24"))

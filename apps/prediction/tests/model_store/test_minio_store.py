@@ -3,6 +3,7 @@ from io import BytesIO
 from unittest.mock import MagicMock
 
 import joblib
+from minio.error import S3Error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
@@ -22,7 +23,7 @@ def _sample_metadata() -> SavedModelMetadata:
     )
 
 
-def test_minio_model_store_save_writes_version_and_latest():
+def test_minio_model_store_save_writes_version_and_promotes_to_latest():
     client = MagicMock()
     store = MinioModelStore(
         endpoint="localhost:9000",
@@ -36,13 +37,57 @@ def test_minio_model_store_save_writes_version_and_latest():
     prefix = store.save(pipeline, _sample_metadata())
 
     assert prefix == "energy-consumption/2026-09-16T14-30-00Z"
-    assert client.put_object.call_count == 4
 
-    keys = [call.args[1] for call in client.put_object.call_args_list]
-    assert "energy-consumption/2026-09-16T14-30-00Z/model.joblib" in keys
-    assert "energy-consumption/2026-09-16T14-30-00Z/metadata.json" in keys
-    assert "energy-consumption/latest/model.joblib" in keys
-    assert "energy-consumption/latest/metadata.json" in keys
+    put_keys = [call.args[1] for call in client.put_object.call_args_list]
+    assert put_keys == [
+        "energy-consumption/2026-09-16T14-30-00Z/model.joblib",
+        "energy-consumption/2026-09-16T14-30-00Z/metadata.json",
+    ]
+
+    # promote() copie cote serveur (pas de re-upload) vers latest/.
+    copy_keys = [call.args[1] for call in client.copy_object.call_args_list]
+    assert copy_keys == [
+        "energy-consumption/latest/model.joblib",
+        "energy-consumption/latest/metadata.json",
+    ]
+
+
+def test_register_writes_the_version_only_without_promoting():
+    client = MagicMock()
+    store = MinioModelStore(
+        endpoint="localhost:9000",
+        access_key="user",
+        secret_key="pass",
+        bucket="models",
+        client=client,
+    )
+    pipeline = Pipeline(steps=[("identity", FunctionTransformer())])
+
+    version = store.register(pipeline, _sample_metadata())
+
+    assert version == "energy-consumption/2026-09-16T14-30-00Z"
+    assert client.copy_object.call_count == 0
+
+
+def test_get_current_metadata_returns_none_when_latest_does_not_exist():
+    client = MagicMock()
+    client.get_object.side_effect = S3Error(
+        response=None,
+        code="NoSuchKey",
+        message="not found",
+        resource="energy-consumption/latest/metadata.json",
+        request_id="1",
+        host_id="h",
+    )
+    store = MinioModelStore(
+        endpoint="localhost:9000",
+        access_key="user",
+        secret_key="pass",
+        bucket="models",
+        client=client,
+    )
+
+    assert store.get_current_metadata("energy-consumption") is None
 
 
 def test_minio_model_store_load_latest_roundtrip():
