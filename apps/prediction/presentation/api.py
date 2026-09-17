@@ -10,7 +10,18 @@ Lancer en local (depuis apps/prediction) :
 Puis ouvrir http://127.0.0.1:8002/docs pour explorer les endpoints.
 """
 
-from fastapi import FastAPI
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, HTTPException, Query
+
+from application.predict import (
+    InvalidPredictionRangeError,
+    ModelNotLoadedError,
+    predict as run_predict,
+    predict_range as run_predict_range,
+)
+from infrastructure.config import Config
+from infrastructure.model_store import create_model_store
 
 app = FastAPI(
     title="EnerVision prediction",
@@ -24,10 +35,119 @@ def root() -> dict:
     """Point d'entrée : liste les endpoints disponibles."""
     return {
         "service": "prediction",
-        "endpoints": ["/docs", "/health"],
+        "endpoints": ["/docs", "/health", "/predict", "/predict/range"],
     }
 
 
 @app.get("/health", tags=["Health"], summary="Vérifie que l'API répond")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/predict", tags=["Prediction"], summary="Prédit la consommation")
+def predict(
+    site_id: str = Query(..., min_length=1, examples=["SITE001"]),
+    timestamp: str = Query(
+        ...,
+        description="Horodatage cible au format ISO8601",
+        examples=["2026-09-17T14:30:00Z"],
+    ),
+) -> dict:
+    """Prédit la consommation (kWh) pour un site à un instant donné."""
+    target_timestamp = _parse_iso8601(timestamp)
+    if target_timestamp is None:
+        raise HTTPException(
+            status_code=422,
+            detail="timestamp must be ISO8601",
+        )
+
+    try:
+        result = run_predict(
+            model_store=create_model_store(),
+            model_name=Config.MODEL_NAME,
+            site_id=site_id,
+            target_timestamp=target_timestamp,
+        )
+    except ModelNotLoadedError:
+        raise HTTPException(status_code=503, detail="model not loaded")
+
+    return {
+        "site_id": result.site_id,
+        "target_timestamp": _format_iso8601(result.target_timestamp),
+        "predicted_consumption_kwh": result.predicted_consumption_kwh,
+        "model_version": result.model_version,
+    }
+
+
+@app.get("/predict/range", tags=["Prediction"], summary="Prédit la consommation sur une plage")
+def predict_range(
+    site_id: str = Query(..., min_length=1, examples=["SITE001"]),
+    start_time: str = Query(
+        ...,
+        description="Début de la plage au format ISO8601 (inclus)",
+        examples=["2026-09-17T08:00:00Z"],
+    ),
+    end_time: str = Query(
+        ...,
+        description="Fin de la plage au format ISO8601 (inclus)",
+        examples=["2026-09-17T12:00:00Z"],
+    ),
+) -> dict:
+    """Prédit la consommation (kWh) minute par minute entre deux instants."""
+    parsed_start = _parse_iso8601(start_time)
+    if parsed_start is None:
+        raise HTTPException(status_code=422, detail="start_time must be ISO8601")
+
+    parsed_end = _parse_iso8601(end_time)
+    if parsed_end is None:
+        raise HTTPException(status_code=422, detail="end_time must be ISO8601")
+
+    try:
+        result = run_predict_range(
+            model_store=create_model_store(),
+            model_name=Config.MODEL_NAME,
+            site_id=site_id,
+            start_time=parsed_start,
+            end_time=parsed_end,
+        )
+    except InvalidPredictionRangeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except ModelNotLoadedError:
+        raise HTTPException(status_code=503, detail="model not loaded")
+
+    return {
+        "site_id": result.site_id,
+        "start_time": _format_iso8601(result.start_time),
+        "end_time": _format_iso8601(result.end_time),
+        "model_version": result.model_version,
+        "count": len(result.predictions),
+        "predictions": [
+            {
+                "target_timestamp": _format_iso8601(point.target_timestamp),
+                "predicted_consumption_kwh": point.predicted_consumption_kwh,
+            }
+            for point in result.predictions
+        ],
+    }
+
+
+def _parse_iso8601(value: str) -> datetime | None:
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_iso8601(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
