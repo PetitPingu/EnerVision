@@ -1,11 +1,14 @@
 """Modèles Pydantic des ressources exposées par l'API Mock EnerVision.
 
-Ces modèles ne font que constater les données reçues : aucun champ métier
-n'a de valeur par défaut (un champ absent doit lever une erreur de
-validation, jamais être silencieusement remplacé par 0.0 ou None), et aucun
-validateur ne corrige, n'arrondit ou ne borne une valeur — un validateur
-peut seulement rejeter. L'imputation/le nettoyage vivent dans
-etl/imputation.py (DATA-04), pas ici.
+Ces modèles ne font que constater les données reçues, rien d'autre :
+
+- Aucun champ métier n'a de valeur par défaut. Si l'API omet un champ,
+  la validation doit échouer — pas de 0.0 ou de None ajouté en douce.
+- Aucun validateur ne corrige, n'arrondit ou ne borne une valeur : il
+  peut seulement rejeter.
+
+L'imputation et le nettoyage vivent ailleurs
+(apps/etl_worker/domain/imputation.py), pas dans ce fichier.
 """
 
 from typing import Literal

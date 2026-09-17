@@ -1,0 +1,49 @@
+name: Prediction Tests
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - "apps/prediction/**"
+      - "packages/db-schema/**"
+      - ".github/workflows/prediction-tests.yml"
+  pull_request:
+    branches:
+      - main
+      - dev
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "apps/prediction/**"
+      - "packages/db-schema/**"
+      - ".github/workflows/prediction-tests.yml"
+
+defaults:
+  run:
+    working-directory: apps/prediction
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/prediction/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -q

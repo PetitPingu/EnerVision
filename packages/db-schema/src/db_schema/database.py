@@ -1,8 +1,7 @@
 """Connexion SQLAlchemy à la base PostgreSQL/TimescaleDB (moteur async, driver psycopg).
 
-Package partagé : le schéma de base (tables, migrations Alembic) ne
-dépend d'aucune app en particulier — plusieurs services peuvent s'y
-brancher indépendamment, sans que l'un dépende du démarrage de l'autre.
+Package partagé : n'importe quel service peut s'y brancher
+indépendamment des autres, sans dépendre de leur démarrage.
 """
 
 from collections.abc import AsyncIterator

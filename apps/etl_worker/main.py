@@ -1,9 +1,8 @@
-"""Point d'entrée du worker d'ingestion (docs/seq_etl.md).
+"""Point d'entrée du worker ETL (docs/seq_etl.md).
 
-Un seul job planifié (APScheduler), toutes les ETL_POLL_INTERVAL_SECONDS
-secondes : récupère les dernières lectures (GET /api/v1/readings) et les
-dépose brutes dans le bucket raw. L'insertion en base et la détection
-d'alerte sont hors périmètre de ce worker (branche séparée).
+Un seul job planifié (APScheduler), qui tourne toutes les
+ETL_POLL_INTERVAL_SECONDS secondes. Voir application/etl_job.py pour ce
+qu'il fait exactement.
 """
 
 import logging

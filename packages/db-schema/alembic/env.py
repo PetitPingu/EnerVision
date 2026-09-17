@@ -1,7 +1,15 @@
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import pool
+
+if sys.platform == "win32":
+    # Sans ça, `alembic upgrade` plante sous Windows : psycopg en mode
+    # async ne supporte pas la boucle Proactor, celle par défaut d'asyncio
+    # sur cet OS. Voir :
+    # https://www.psycopg.org/psycopg3/docs/advanced/async.html#async-and-windows
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
