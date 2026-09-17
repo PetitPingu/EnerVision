@@ -7,7 +7,7 @@ core_api.
 
 from abc import ABC, abstractmethod
 
-from domain.entities import Prediction, Recommendation, Site
+from domain.entities import PowerFactorReading, Prediction, Recommendation, Site
 
 
 class PredictionApiPort(ABC):
@@ -24,6 +24,14 @@ class SiteRepositoryPort(ABC):
     @abstractmethod
     def get_site(self, site_id: str) -> Site | None:
         """Site par identifiant. Retourne None si inconnu ou incomplet."""
+
+
+class PowerFactorRepositoryPort(ABC):
+    """Accès au dernier facteur de puissance mesuré d'un site (readings_curated)."""
+
+    @abstractmethod
+    def get_latest_power_factor(self, site_id: str) -> PowerFactorReading | None:
+        """Dernier facteur de puissance connu. Retourne None si indisponible."""
 
 
 class RecommendationRepositoryPort(ABC):
