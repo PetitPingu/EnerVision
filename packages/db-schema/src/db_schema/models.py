@@ -107,6 +107,8 @@ class Recommendation(Base):
     prediction_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     type: Mapped[str]
     message: Mapped[str] = mapped_column(Text)
+    model_version: Mapped[str | None]
+    estimated_gain_kwh: Mapped[float | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     site: Mapped["Site"] = relationship()

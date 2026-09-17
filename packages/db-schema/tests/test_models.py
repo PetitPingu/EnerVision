@@ -51,3 +51,10 @@ def test_recommendations_prediction_id_is_nullable():
     column = orm_models.Recommendation.__table__.columns["prediction_id"]
 
     assert column.nullable
+
+
+def test_recommendations_references_model_version_and_estimated_gain():
+    columns = orm_models.Recommendation.__table__.columns
+
+    assert columns["model_version"].nullable
+    assert columns["estimated_gain_kwh"].nullable
