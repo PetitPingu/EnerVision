@@ -1,10 +1,15 @@
 services:
   traefik:
-    image: traefik:v3.1
+    # v3.1 embarque un client Docker qui négocie l'API en v1.24, rejetée
+    # (400 Bad Request) par les daemons récents dont l'API minimale est
+    # montée à v1.40+ (ex: Docker Desktop récent) — v3.7 corrige cette
+    # négociation. Voir la discussion dans la PR d'introduction de ce fichier.
+    image: traefik:v3.7
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.traefik.address=:8080"
       - "--api.dashboard=true"
       - "--metrics.prometheus=true"
     ports:
@@ -14,6 +19,17 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - enervision-net
+    labels:
+      # Dashboard Traefik exposé sur son propre entrypoint (:8080), protégé
+      # par basic auth : sans ça --api.dashboard=true seul ne sert rien tant
+      # qu'aucun router ne pointe vers le service interne api@internal.
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=traefik"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+      # admin / admin — à changer en prod (générer avec `openssl passwd -apr1`).
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$SFOMPty7$$gIWm8tIUjfrD71YDXaH.r."
 
   # Image TimescaleDB (surcouche Postgres) au lieu de postgres:16-alpine, pour
   # disposer de l'extension timescaledb sur les séries temporelles — le
@@ -129,6 +145,13 @@ services:
         condition: service_completed_successfully
     networks:
       - enervision-net
+    labels:
+      # Accès via Traefik en plus du bind loopback existant (celui-ci reste
+      # pour l'accès direct par tunnel SSH).
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
 
   grafana:
     image: grafana/grafana:11.4.0
@@ -139,12 +162,16 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
-    ports:
-      - "${GRAFANA_PORT:-3001}:3000"
     depends_on:
       - prometheus
     networks:
       - enervision-net
+    labels:
+      # Plus de port publié : on passe uniquement par Traefik désormais.
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
   minio-init:
     image: quay.io/minio/mc:latest
@@ -207,6 +234,15 @@ services:
         condition: service_healthy
     networks:
       - enervision-net
+    labels:
+      # Exposé directement en plus du chemin interne via core_api, pratique
+      # pour tester le service ML isolément (Swagger sur /prediction/docs).
+      - "traefik.enable=true"
+      - "traefik.http.routers.prediction.rule=PathPrefix(`/prediction`)"
+      - "traefik.http.routers.prediction.entrypoints=web"
+      - "traefik.http.routers.prediction.middlewares=prediction-stripprefix"
+      - "traefik.http.middlewares.prediction-stripprefix.stripprefix.prefixes=/prediction"
+      - "traefik.http.services.prediction.loadbalancer.server.port=8000"
 
   recommendation:
     build:
@@ -224,6 +260,13 @@ services:
         condition: service_started
     networks:
       - enervision-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.recommendation.rule=PathPrefix(`/recommendation`)"
+      - "traefik.http.routers.recommendation.entrypoints=web"
+      - "traefik.http.routers.recommendation.middlewares=recommendation-stripprefix"
+      - "traefik.http.middlewares.recommendation-stripprefix.stripprefix.prefixes=/recommendation"
+      - "traefik.http.services.recommendation.loadbalancer.server.port=8000"
 
   etl_worker:
     build:
