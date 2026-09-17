@@ -32,7 +32,20 @@ if errorlevel 1 (
 )
 echo.
 
-echo [3/3] Dashboard - npm install
+echo [3/4] Recommendation - pip install -r requirements.txt
+cd /d "%ROOT%apps\recommendation"
+if errorlevel 1 (
+    echo Erreur : impossible d'acceder au dossier recommendation.
+    exit /b 1
+)
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo Erreur lors de l'installation des dependances Recommendation.
+    exit /b 1
+)
+echo.
+
+echo [4/4] Dashboard - npm install
 cd /d "%ROOT%apps\dashboard"
 if errorlevel 1 (
     echo Erreur : impossible d'acceder au dossier dashboard.
