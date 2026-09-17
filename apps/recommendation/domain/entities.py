@@ -22,6 +22,14 @@ class Prediction:
 
 
 @dataclass(frozen=True)
+class PowerFactorReading:
+    """Dernier facteur de puissance mesuré pour un site (table readings_curated)."""
+
+    site_id: str
+    power_factor: float
+
+
+@dataclass(frozen=True)
 class Recommendation:
     """Un conseil généré par le moteur de règles pour un site."""
 
@@ -29,3 +37,5 @@ class Recommendation:
     type: str
     message: str
     prediction_id: str | None = None
+    model_version: str | None = None
+    estimated_gain_kwh: float | None = None

@@ -22,6 +22,8 @@ class SqlRecommendationRepository(RecommendationRepositoryPort):
                 prediction_id=r.prediction_id,
                 type=r.type,
                 message=r.message,
+                model_version=r.model_version,
+                estimated_gain_kwh=r.estimated_gain_kwh,
             )
             for r in recommendations
         ]
