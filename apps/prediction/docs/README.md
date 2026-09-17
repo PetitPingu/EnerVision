@@ -9,6 +9,7 @@ Documentation du service `apps/prediction` : prédiction de consommation
 |---|---|
 | [architecture.md](architecture.md) | Architecture hexagonale, couches, ports, flux de données |
 | [ml-pipeline.md](ml-pipeline.md) | Feature engineering, modèle sklearn, métriques |
+| [model-choice.md](model-choice.md) | Justification du choix RandomForestRegressor |
 | [configuration.md](configuration.md) | Variables d'environnement |
 | [development.md](development.md) | Lancer en local, tests, CI, scripts manuels |
 

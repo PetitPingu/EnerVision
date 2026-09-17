@@ -39,6 +39,9 @@ TARGET          = consumption_kwh
 
 ## Modèle (`infrastructure/ml/pipeline.py`)
 
+Justification du choix `RandomForestRegressor` : voir
+[model-choice.md](model-choice.md).
+
 Pipeline sklearn :
 
 ```
