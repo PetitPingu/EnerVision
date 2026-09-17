@@ -1,13 +1,13 @@
 """Cas d'usage : backfill historique des lectures.
 
-1. Récupère les lectures sur une plage de dates via l'API Mock (pagination).
+1. Un appel API par jour calendaire (start/end en date, limit=1000).
 2. Pour chaque lecture : écriture raw (MinIO) + imputation consumption_kwh.
-3. Upsert des lignes curées dans readings_curated (Postgres), page par page.
+3. Upsert des lignes curées dans readings_curated (Postgres).
 """
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from domain.imputation import ConsumptionKwhImputer
 from ingestion import MockApiClient
@@ -18,9 +18,11 @@ from infrastructure.raw_writer import RawWriter
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LIMIT = 1000
+
 
 class HistoricalBackfill:
-    """Backfill historique : fetch paginé, traitement et écriture curated."""
+    """Backfill historique : exactement un fetch par jour."""
 
     def __init__(
         self,
@@ -28,7 +30,7 @@ class HistoricalBackfill:
         raw_writer: RawWriter | None = None,
         curated_writer: CuratedWriter | None = None,
         imputer: ConsumptionKwhImputer | None = None,
-        limit: int = 1000,
+        limit: int = DEFAULT_LIMIT,
     ):
         self.api_client = api_client or MockApiClient()
         self.raw_writer = raw_writer or RawWriter()
@@ -37,63 +39,56 @@ class HistoricalBackfill:
         self.processor = ReadingProcessor(raw_writer=self.raw_writer, imputer=self.imputer)
         self.limit = limit
 
-    def run(self, start: datetime, end: datetime) -> dict:
-        """Backfill entre start et end. Retourne un résumé {fetched, curated, skipped}."""
-        if start >= end:
-            raise ValueError(f"start ({start}) doit être strictement avant end ({end})")
+    def run(self, start: date, end: date) -> dict:
+        """Backfill du jour start au jour end (inclus). Un appel API par jour."""
+        if start > end:
+            raise ValueError(f"start ({start}) doit être avant ou égal à end ({end})")
 
-        stats = {"fetched": 0, "curated": 0, "skipped": 0}
-        cursor = start
-        page = 0
+        stats = {"fetched": 0, "curated": 0, "skipped": 0, "days_done": 0}
+        total_days = (end - start).days + 1
+        current = start
+        day_index = 0
 
-        while cursor < end:
-            batch = self.api_client.get_readings(
-                start=cursor.isoformat(),
-                end=end.isoformat(),
+        while current <= end:
+            day_index += 1
+            day_start = datetime(current.year, current.month, current.day, tzinfo=timezone.utc)
+            day_end = day_start + timedelta(days=1)
+
+            readings = self.api_client.get_readings(
+                start=day_start.isoformat(),
+                end=day_end.isoformat(),
                 limit=self.limit,
             )
-            if not batch:
-                break
 
-            page += 1
-            stats["fetched"] += len(batch)
+            stats["fetched"] += len(readings)
             curated_rows = [
-                row for reading in batch if (row := self.processor.process(reading)) is not None
+                row for reading in readings if (row := self.processor.process(reading)) is not None
             ]
-            stats["skipped"] += len(batch) - len(curated_rows)
+            stats["skipped"] += len(readings) - len(curated_rows)
 
             if curated_rows:
                 try:
                     self.curated_writer.upsert_many(curated_rows)
-                except Exception as exc:  # noqa: BLE001 - Postgres en panne : on logge et on arrête le backfill
-                    self._log(status="curated_write_error", error=str(exc), page=page)
+                except Exception as exc:  # noqa: BLE001
+                    self._log(status="curated_write_error", error=str(exc), day=current.isoformat())
                     return stats
 
                 stats["curated"] += len(curated_rows)
 
+            stats["days_done"] += 1
             logger.info(
-                "Page %d : %d fetchée(s), %d curée(s), %d ignorée(s), total %d",
-                page,
-                len(batch),
+                "Jour %d/%d (%s) : %d fetchée(s), %d curée(s), total %d",
+                day_index,
+                total_days,
+                current.isoformat(),
+                len(readings),
                 len(curated_rows),
-                len(batch) - len(curated_rows),
                 stats["curated"],
             )
 
-            last_ts = self._parse_timestamp(batch[-1].timestamp)
-            if last_ts <= cursor:
-                break
-
-            cursor = last_ts + timedelta(microseconds=1)
+            current += timedelta(days=1)
 
         return stats
-
-    @staticmethod
-    def _parse_timestamp(value: str) -> datetime:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed
 
     @staticmethod
     def _log(**extra) -> None:
