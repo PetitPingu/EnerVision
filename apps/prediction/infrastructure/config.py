@@ -33,3 +33,7 @@ class Config:
     MINIO_SECRET_KEY = os.environ.get("MINIO_ROOT_PASSWORD", "changeme123")
     MINIO_MODELS_BUCKET = os.environ.get("MINIO_MODELS_BUCKET", "models")
     MINIO_SECURE = os.environ.get("MINIO_SECURE", "false").lower() == "true"
+
+    MAX_PREDICTION_RANGE_MINUTES = int(
+        os.environ.get("MAX_PREDICTION_RANGE_MINUTES", str(7 * 24 * 60))
+    )
