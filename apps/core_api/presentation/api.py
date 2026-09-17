@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from infrastructure.api_client import ApiMockClient
 from infrastructure.prediction_client import PredictionApiClient
+from infrastructure.recommendation_client import RecommendationApiClient
 
 app = FastAPI(
     title="EnerVision core_api",
@@ -39,6 +40,7 @@ app.add_middleware(
 
 sensor_api = ApiMockClient()
 prediction_api = PredictionApiClient()
+recommendation_api = RecommendationApiClient()
 
 
 @app.get("/", tags=["Root"], summary="Root")
@@ -54,6 +56,7 @@ def root() -> dict:
             "/api/v1/alerts",
             "/api/v1/sensors/status",
             "/api/v1/predictions/range",
+            "/api/v1/recommendations",
         ]
     }
 
@@ -146,4 +149,19 @@ def list_predictions_range(
     )
     if result is None:
         raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
+    return result
+
+
+@app.get(
+    "/api/v1/recommendations",
+    tags=["Recommendations"],
+    summary="Recommandations d'un site",
+)
+def list_recommendations(
+    site_id: str = Query(..., min_length=1, description="Site à recommander, ex: SITE001"),
+) -> list:
+    """Relaie GET /api/v1/recommendations du service recommendation."""
+    result = recommendation_api.get_recommendations(site_id=site_id)
+    if result is None:
+        raise HTTPException(status_code=502, detail="Service de recommandation indisponible")
     return result

@@ -20,6 +20,7 @@ def _client(
     alerts=None,
     current_reading=_UNSET,
     sensors_status=None,
+    recommendations=_UNSET,
 ):
     mock_api = Mock()
     mock_api.get_sites.return_value = sites if sites is not None else SITES
@@ -32,11 +33,18 @@ def _client(
         sensors_status if sensors_status is not None else {"SITE001": {"overall": "ok"}}
     )
     monkeypatch.setattr(api, "sensor_api", mock_api)
-    return TestClient(api.app), mock_api
+
+    mock_recommendation_api = Mock()
+    mock_recommendation_api.get_recommendations.return_value = (
+        [] if recommendations is _UNSET else recommendations
+    )
+    monkeypatch.setattr(api, "recommendation_api", mock_recommendation_api)
+
+    return TestClient(api.app), mock_api, mock_recommendation_api
 
 
 def test_root_lists_endpoints(monkeypatch):
-    client, _ = _client(monkeypatch)
+    client, _, _ = _client(monkeypatch)
 
     response = client.get("/")
 
@@ -45,7 +53,7 @@ def test_root_lists_endpoints(monkeypatch):
 
 
 def test_health_returns_ok(monkeypatch):
-    client, _ = _client(monkeypatch)
+    client, _, _ = _client(monkeypatch)
 
     response = client.get("/health")
 
@@ -54,7 +62,7 @@ def test_health_returns_ok(monkeypatch):
 
 
 def test_sites_relays_api_mock_client(monkeypatch):
-    client, mock_api = _client(monkeypatch)
+    client, mock_api, _ = _client(monkeypatch)
 
     response = client.get("/api/v1/sites")
 
@@ -64,7 +72,7 @@ def test_sites_relays_api_mock_client(monkeypatch):
 
 
 def test_readings_relays_with_same_params_as_remote_api(monkeypatch):
-    client, mock_api = _client(monkeypatch)
+    client, mock_api, _ = _client(monkeypatch)
 
     response = client.get(
         "/api/v1/readings",
@@ -79,7 +87,7 @@ def test_readings_relays_with_same_params_as_remote_api(monkeypatch):
 
 
 def test_readings_defaults_when_no_params(monkeypatch):
-    client, mock_api = _client(monkeypatch)
+    client, mock_api, _ = _client(monkeypatch)
 
     response = client.get("/api/v1/readings")
 
@@ -90,7 +98,7 @@ def test_readings_defaults_when_no_params(monkeypatch):
 
 
 def test_current_reading_relays_api_mock_client(monkeypatch):
-    client, mock_api = _client(monkeypatch)
+    client, mock_api, _ = _client(monkeypatch)
 
     response = client.get("/api/v1/sites/SITE001/current")
 
@@ -100,7 +108,7 @@ def test_current_reading_relays_api_mock_client(monkeypatch):
 
 
 def test_current_reading_returns_404_when_unavailable(monkeypatch):
-    client, mock_api = _client(monkeypatch, current_reading=None)
+    client, mock_api, _ = _client(monkeypatch, current_reading=None)
 
     response = client.get("/api/v1/sites/NOPE/current")
 
@@ -108,7 +116,7 @@ def test_current_reading_returns_404_when_unavailable(monkeypatch):
 
 
 def test_alerts_relays_api_mock_client(monkeypatch):
-    client, mock_api = _client(monkeypatch)
+    client, mock_api, _ = _client(monkeypatch)
 
     response = client.get("/api/v1/alerts", params={"site_id": "SITE001", "severity": "high"})
 
@@ -118,10 +126,38 @@ def test_alerts_relays_api_mock_client(monkeypatch):
 
 
 def test_sensors_status_relays_api_mock_client(monkeypatch):
-    client, mock_api = _client(monkeypatch)
+    client, mock_api, _ = _client(monkeypatch)
 
     response = client.get("/api/v1/sensors/status")
 
     assert response.status_code == 200
     assert response.json() == {"SITE001": {"overall": "ok"}}
     mock_api.get_sensors_status.assert_called_once()
+
+
+def test_recommendations_relays_recommendation_api_client(monkeypatch):
+    payload = [{"site_id": "SITE001", "action": "load_shifting", "justification": "..."}]
+    client, _, mock_recommendation_api = _client(monkeypatch, recommendations=payload)
+
+    response = client.get("/api/v1/recommendations", params={"site_id": "SITE001"})
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    mock_recommendation_api.get_recommendations.assert_called_once_with(site_id="SITE001")
+
+
+def test_recommendations_returns_502_when_service_unavailable(monkeypatch):
+    client, _, mock_recommendation_api = _client(monkeypatch)
+    mock_recommendation_api.get_recommendations.return_value = None
+
+    response = client.get("/api/v1/recommendations", params={"site_id": "SITE001"})
+
+    assert response.status_code == 502
+
+
+def test_recommendations_requires_site_id(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/recommendations")
+
+    assert response.status_code == 422

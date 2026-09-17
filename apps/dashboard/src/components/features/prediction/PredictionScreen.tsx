@@ -2,6 +2,7 @@
 
 import { PredictionKpiRow } from "@/components/features/prediction/PredictionKpiRow";
 import { PredictionSection } from "@/components/features/prediction/PredictionSection";
+import { RecommendationsSection } from "@/components/features/prediction/RecommendationsSection";
 import { useSiteSelection } from "@/contexts/SiteSelectionContext";
 
 const SITE_TYPE_LABELS: Record<string, string> = {
@@ -44,6 +45,7 @@ export function PredictionScreen() {
 
       <PredictionKpiRow />
       <PredictionSection siteId={selectedSiteId} />
+      <RecommendationsSection siteId={selectedSiteId} />
     </main>
   );
 }
