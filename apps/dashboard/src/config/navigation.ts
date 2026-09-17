@@ -13,7 +13,7 @@ export const NAV_ITEMS: NavItem[] = [
     icon: "dashboard",
   },
   {
-    label: "Prévision",
+    label: "Prédictions & Recommandations",
     href: "/prediction",
     icon: "prediction",
   },

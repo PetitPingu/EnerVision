@@ -24,3 +24,4 @@ class Config:
     REQUEST_TIMEOUT = float(os.environ.get("ENERVISION_REQUEST_TIMEOUT", "5"))
 
     PREDICTION_URL = os.environ.get("PREDICTION_URL", "http://localhost:8002")
+    RECOMMENDATION_URL = os.environ.get("RECOMMENDATION_URL", "http://localhost:8003")

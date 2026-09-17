@@ -231,6 +231,11 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PREDICTION_URL: http://prediction:8000
       RECOMMENDATION_URL: http://recommendation:8000
+      ENERVISION_API_SCHEME: ${ENERVISION_API_SCHEME:-http}
+      ENERVISION_API_HOST: ${ENERVISION_API_HOST}
+      ENERVISION_API_PORT: ${ENERVISION_API_PORT}
+      ENERVISION_API_USERNAME: ${ENERVISION_API_USERNAME}
+      ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
