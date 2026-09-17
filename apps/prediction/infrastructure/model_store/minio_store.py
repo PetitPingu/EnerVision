@@ -10,6 +10,8 @@ from io import BytesIO
 
 import joblib
 from minio import Minio
+from minio.commonconfig import CopySource
+from minio.error import S3Error
 from sklearn.pipeline import Pipeline
 
 from application.ports import ModelStorePort, SavedModelMetadata
@@ -36,20 +38,42 @@ class MinioModelStore(ModelStorePort):
         )
 
     def save(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
+        version = self.register(pipeline, metadata)
+        self.promote(metadata.model_name, version)
+
+        return version
+
+    def register(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
+        """Écrit la version sous {model_name}/{trained_at}/ sans toucher au
+        pointeur latest/ - voir promote()."""
         version_prefix = f"{metadata.model_name}/{metadata.trained_at}"
         self._put_pipeline(f"{version_prefix}/model.joblib", pipeline)
         self._put_metadata(f"{version_prefix}/metadata.json", metadata)
 
-        latest_prefix = f"{metadata.model_name}/latest"
-        self._put_pipeline(f"{latest_prefix}/model.joblib", pipeline)
-        self._put_metadata(f"{latest_prefix}/metadata.json", metadata)
-
         return version_prefix
+
+    def promote(self, model_name: str, version: str) -> None:
+        """Copie {version}/ vers latest/ côté serveur (pas de ré-upload)."""
+        latest_prefix = f"{model_name}/latest"
+        for filename in ("model.joblib", "metadata.json"):
+            self._client.copy_object(
+                self._bucket,
+                f"{latest_prefix}/{filename}",
+                CopySource(self._bucket, f"{version}/{filename}"),
+            )
 
     def load_latest(self, model_name: str) -> tuple[Pipeline, SavedModelMetadata]:
         pipeline = self._get_pipeline(f"{model_name}/latest/model.joblib")
         metadata = self._get_metadata(f"{model_name}/latest/metadata.json")
         return pipeline, metadata
+
+    def get_current_metadata(self, model_name: str) -> SavedModelMetadata | None:
+        try:
+            return self._get_metadata(f"{model_name}/latest/metadata.json")
+        except S3Error as exc:
+            if exc.code == "NoSuchKey":
+                return None
+            raise
 
     def _put_pipeline(self, object_key: str, pipeline: Pipeline) -> None:
         buffer = BytesIO()

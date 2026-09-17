@@ -31,3 +31,22 @@ class ModelStorePort(ABC):
         """Charge le dernier modèle entraîné pour {model_name} (implémentation-
         dépendant : pointeur {model_name}/latest/ pour MinioModelStore, alias
         de Model Registry pour MlflowModelStore)."""
+
+    @abstractmethod
+    def register(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
+        """Enregistre une nouvelle version sans la mettre en production.
+
+        Utilisé par le ré-entraînement planifié (champion/challenger) : le
+        candidat doit être conservé (historique, comparaison a posteriori)
+        même s'il n'est pas meilleur que le modèle actuellement servi. Voir
+        promote(). Retourne l'identifiant de version à passer à promote().
+        """
+
+    @abstractmethod
+    def promote(self, model_name: str, version: str) -> None:
+        """Fait de {version} le modèle servi par load_latest() pour {model_name}."""
+
+    @abstractmethod
+    def get_current_metadata(self, model_name: str) -> SavedModelMetadata | None:
+        """Métadonnées du modèle actuellement en production, ou None si
+        {model_name} n'a encore jamais été promu."""

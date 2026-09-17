@@ -16,6 +16,7 @@ notion historique de "dernière version"), il lève une erreur à la création.
 import mlflow
 import mlflow.sklearn
 from mlflow.entities import Run
+from mlflow.exceptions import MlflowException
 from mlflow.tracking import MlflowClient
 from sklearn.pipeline import Pipeline
 
@@ -32,6 +33,14 @@ class MlflowModelStore(ModelStorePort):
         self._client = client or MlflowClient(tracking_uri=tracking_uri)
 
     def save(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
+        version = self.register(pipeline, metadata)
+        self.promote(metadata.model_name, version)
+
+        return f"{metadata.model_name}/{version}"
+
+    def register(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
+        """Enregistre une nouvelle version dans le Registry sans toucher à
+        l'alias `current` - voir promote()."""
         with mlflow.start_run(run_name=metadata.trained_at):
             mlflow.log_params(
                 {
@@ -42,7 +51,7 @@ class MlflowModelStore(ModelStorePort):
                 }
             )
             mlflow.log_metrics({"mae": metadata.mae, "rmse": metadata.rmse})
-            
+
             model_info = mlflow.sklearn.log_model(
                 pipeline,
                 name="model",
@@ -50,10 +59,10 @@ class MlflowModelStore(ModelStorePort):
                 skops_trusted_types=["sklearn.tree._tree.Tree"],
             )
 
-        version = model_info.registered_model_version
-        self._client.set_registered_model_alias(metadata.model_name, _ALIAS, version)
+        return model_info.registered_model_version
 
-        return f"{metadata.model_name}/{version}"
+    def promote(self, model_name: str, version: str) -> None:
+        self._client.set_registered_model_alias(model_name, _ALIAS, version)
 
     def load_latest(self, model_name: str) -> tuple[Pipeline, SavedModelMetadata]:
         model_version = self._client.get_model_version_by_alias(model_name, _ALIAS)
@@ -63,6 +72,19 @@ class MlflowModelStore(ModelStorePort):
         metadata = _metadata_from_run(model_name, run)
 
         return pipeline, metadata
+
+    def get_current_metadata(self, model_name: str) -> SavedModelMetadata | None:
+        """Métadonnées du modèle actuellement servi (alias `current`), ou
+        None si {model_name} n'a encore jamais été promu."""
+        try:
+            model_version = self._client.get_model_version_by_alias(model_name, _ALIAS)
+        except MlflowException as exc:
+            if exc.error_code == "RESOURCE_DOES_NOT_EXIST":
+                return None
+            raise
+
+        run = self._client.get_run(model_version.run_id)
+        return _metadata_from_run(model_name, run)
 
 
 def _metadata_from_run(model_name: str, run: Run) -> SavedModelMetadata:
