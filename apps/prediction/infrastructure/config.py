@@ -20,6 +20,9 @@ class Config:
         "postgresql+psycopg://enervision:changeme@localhost:5432/enervision",
     )
     PORT = int(os.environ.get("PREDICTION_PORT", "8000"))
+    # Rechargement automatique d'uvicorn au changement de fichier : pratique
+    # en dev local (`python main.py`), à laisser désactivé en conteneur/prod.
+    RELOAD = os.environ.get("PREDICTION_RELOAD", "false").lower() == "true"
 
     # mock : données synthétiques | json : fichier local | postgres : readings_curated
     TRAINING_DATA_SOURCE = os.environ.get("TRAINING_DATA_SOURCE", "mock")

@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query
 
 from application.predict import (
+    InvalidIntervalError,
     InvalidPredictionRangeError,
     ModelNotLoadedError,
     predict as run_predict,
@@ -46,11 +47,10 @@ def health() -> dict:
 
 @app.get("/predict", tags=["Prediction"], summary="Prédit la consommation")
 def predict(
-    site_id: str = Query(..., min_length=1, examples=["SITE001"]),
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
     timestamp: str = Query(
         ...,
-        description="Horodatage cible au format ISO8601",
-        examples=["2026-09-17T14:30:00Z"],
+        description="Horodatage cible au format ISO8601, ex: 2026-09-17T14:30:00Z",
     ),
 ) -> dict:
     """Prédit la consommation (kWh) pour un site à un instant donné."""
@@ -81,19 +81,21 @@ def predict(
 
 @app.get("/predict/range", tags=["Prediction"], summary="Prédit la consommation sur une plage")
 def predict_range(
-    site_id: str = Query(..., min_length=1, examples=["SITE001"]),
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
     start_time: str = Query(
         ...,
-        description="Début de la plage au format ISO8601 (inclus)",
-        examples=["2026-09-17T08:00:00Z"],
+        description="Début de la plage au format ISO8601 (inclus), ex: 2026-09-17T08:00:00Z",
     ),
     end_time: str = Query(
         ...,
-        description="Fin de la plage au format ISO8601 (inclus)",
-        examples=["2026-09-17T12:00:00Z"],
+        description="Fin de la plage au format ISO8601 (inclus), ex: 2026-09-17T12:00:00Z",
+    ),
+    interval: str = Query(
+        "minute",
+        description="Pas de la série retournée : 'minute' (défaut) ou 'hour'",
     ),
 ) -> dict:
-    """Prédit la consommation (kWh) minute par minute entre deux instants."""
+    """Prédit la consommation (kWh) entre deux instants, minute par minute ou heure par heure."""
     parsed_start = _parse_iso8601(start_time)
     if parsed_start is None:
         raise HTTPException(status_code=422, detail="start_time must be ISO8601")
@@ -109,7 +111,10 @@ def predict_range(
             site_id=site_id,
             start_time=parsed_start,
             end_time=parsed_end,
+            interval=interval,
         )
+    except InvalidIntervalError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     except InvalidPredictionRangeError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except ModelNotLoadedError:
@@ -119,6 +124,7 @@ def predict_range(
         "site_id": result.site_id,
         "start_time": _format_iso8601(result.start_time),
         "end_time": _format_iso8601(result.end_time),
+        "interval": result.interval,
         "model_version": result.model_version,
         "count": len(result.predictions),
         "predictions": [

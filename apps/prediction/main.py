@@ -24,7 +24,7 @@ def main() -> None:
         "presentation.api:app",
         host="0.0.0.0",
         port=Config.PORT,
-        reload=False,
+        reload=Config.RELOAD,
     )
 
 

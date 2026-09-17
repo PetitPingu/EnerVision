@@ -16,6 +16,7 @@ from dataclasses import asdict
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from infrastructure.api_client import ApiMockClient
+from infrastructure.prediction_client import PredictionApiClient
 
 app = FastAPI(
     title="EnerVision core_api",
@@ -37,6 +38,7 @@ app.add_middleware(
 )
 
 sensor_api = ApiMockClient()
+prediction_api = PredictionApiClient()
 
 
 @app.get("/", tags=["Root"], summary="Root")
@@ -51,6 +53,7 @@ def root() -> dict:
             "/api/v1/readings",
             "/api/v1/alerts",
             "/api/v1/sensors/status",
+            "/api/v1/predictions/range",
         ]
     }
 
@@ -115,3 +118,32 @@ def list_alerts(
 def sensors_status() -> dict:
     """Relaie l'état de santé des capteurs par site depuis l'API mock."""
     return sensor_api.get_sensors_status()
+
+
+@app.get(
+    "/api/v1/predictions/range",
+    tags=["Predictions"],
+    summary="Prévision de consommation sur une plage",
+)
+def list_predictions_range(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    start_time: str = Query(
+        ...,
+        description="Début de la période au format ISO 8601, ex: 2026-09-17T08:00:00Z",
+    ),
+    end_time: str = Query(
+        ...,
+        description="Fin de la période au format ISO 8601, ex: 2026-09-17T12:00:00Z",
+    ),
+    interval: str = Query(
+        "minute",
+        description="Pas de la série retournée : 'minute' (défaut) ou 'hour'",
+    ),
+) -> dict:
+    """Relaie GET /predict/range du service prediction."""
+    result = prediction_api.get_prediction_range(
+        site_id=site_id, start_time=start_time, end_time=end_time, interval=interval
+    )
+    if result is None:
+        raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
+    return result
