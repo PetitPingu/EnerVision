@@ -29,4 +29,3 @@ exec mlflow server \
   --host 0.0.0.0 \
   --port 5000 \
   --allowed-hosts "mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
-scm-history-item:d%3A%5CWorkspace%5CEnerVision?%7B%22repositoryId%22%3A%22scm0%22%2C%22historyItemId%22%3A%22697dec2badfd65ca85ca575a4c4b194dceda6e2c%22%2C%22historyItemParentId%22%3A%22377efe87b73e363920722395c2fbc5808d583aea%22%2C%22historyItemDisplayId%22%3A%22697dec2%22%7D
