@@ -7,6 +7,7 @@ même convention que ApiMockClient dans core_api.
 """
 
 import logging
+from datetime import UTC, datetime
 
 import requests
 from application.ports import PredictionApiPort
@@ -28,14 +29,14 @@ class PredictionHttpClient(PredictionApiPort):
         try:
             response = requests.get(
                 f"{self._base_url}/predict",
-                params={"site_id": site_id},
+                params={"site_id": site_id, "timestamp": datetime.now(UTC).isoformat()},
                 timeout=self._timeout,
             )
             response.raise_for_status()
             data = response.json()
             return Prediction(
                 site_id=data["site_id"],
-                predicted_consumption_kw=data["predicted_consumption_kw"],
+                predicted_consumption_kw=data["predicted_consumption_kwh"],
                 target_timestamp=data.get("target_timestamp"),
                 model_version=data.get("model_version"),
             )

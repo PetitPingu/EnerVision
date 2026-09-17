@@ -25,18 +25,20 @@ def _response(json_data, status_ok=True):
     return response
 
 
-def test_get_prediction_calls_predict_endpoint_with_site_id(monkeypatch):
+def test_get_prediction_calls_predict_endpoint_with_site_id_and_timestamp(monkeypatch):
     client, mock_get = _client(
         monkeypatch,
-        response=_response({"site_id": "SITE001", "predicted_consumption_kw": 120.0}),
+        response=_response({"site_id": "SITE001", "predicted_consumption_kwh": 120.0}),
     )
 
     result = client.get_prediction("SITE001")
 
     assert result == Prediction(site_id="SITE001", predicted_consumption_kw=120.0)
-    mock_get.assert_called_once_with(
-        "http://prediction:8000/predict", params={"site_id": "SITE001"}, timeout=5.0
-    )
+    _, kwargs = mock_get.call_args
+    assert mock_get.call_args[0] == ("http://prediction:8000/predict",)
+    assert kwargs["params"]["site_id"] == "SITE001"
+    assert "timestamp" in kwargs["params"]
+    assert kwargs["timeout"] == 5.0
 
 
 def test_get_prediction_returns_none_on_http_error(monkeypatch):
