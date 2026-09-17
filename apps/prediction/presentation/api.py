@@ -47,11 +47,10 @@ def health() -> dict:
 
 @app.get("/predict", tags=["Prediction"], summary="Prédit la consommation")
 def predict(
-    site_id: str = Query(..., min_length=1, examples=["SITE001"]),
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
     timestamp: str = Query(
         ...,
-        description="Horodatage cible au format ISO8601",
-        examples=["2026-09-17T14:30:00Z"],
+        description="Horodatage cible au format ISO8601, ex: 2026-09-17T14:30:00Z",
     ),
 ) -> dict:
     """Prédit la consommation (kWh) pour un site à un instant donné."""
@@ -82,21 +81,18 @@ def predict(
 
 @app.get("/predict/range", tags=["Prediction"], summary="Prédit la consommation sur une plage")
 def predict_range(
-    site_id: str = Query(..., min_length=1, examples=["SITE001"]),
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
     start_time: str = Query(
         ...,
-        description="Début de la plage au format ISO8601 (inclus)",
-        examples=["2026-09-17T08:00:00Z"],
+        description="Début de la plage au format ISO8601 (inclus), ex: 2026-09-17T08:00:00Z",
     ),
     end_time: str = Query(
         ...,
-        description="Fin de la plage au format ISO8601 (inclus)",
-        examples=["2026-09-17T12:00:00Z"],
+        description="Fin de la plage au format ISO8601 (inclus), ex: 2026-09-17T12:00:00Z",
     ),
     interval: str = Query(
         "minute",
         description="Pas de la série retournée : 'minute' (défaut) ou 'hour'",
-        examples=["minute", "hour"],
     ),
 ) -> dict:
     """Prédit la consommation (kWh) entre deux instants, minute par minute ou heure par heure."""

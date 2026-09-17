@@ -126,11 +126,18 @@ def sensors_status() -> dict:
     summary="Prévision de consommation sur une plage",
 )
 def list_predictions_range(
-    site_id: str = Query(..., min_length=1, description="Site à prédire (ex: SITE001)"),
-    start_time: str = Query(..., description="Début de la période (ISO 8601)"),
-    end_time: str = Query(..., description="Fin de la période (ISO 8601)"),
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    start_time: str = Query(
+        ...,
+        description="Début de la période au format ISO 8601, ex: 2026-09-17T08:00:00Z",
+    ),
+    end_time: str = Query(
+        ...,
+        description="Fin de la période au format ISO 8601, ex: 2026-09-17T12:00:00Z",
+    ),
     interval: str = Query(
-        "minute", description="Pas de la série retournée : 'minute' (défaut) ou 'hour'"
+        "minute",
+        description="Pas de la série retournée : 'minute' (défaut) ou 'hour'",
     ),
 ) -> dict:
     """Relaie GET /predict/range du service prediction."""
