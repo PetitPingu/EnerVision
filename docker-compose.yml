@@ -62,9 +62,8 @@ services:
       # reste protégé par JWT (comportement par défaut de MinIO). Le token
       # de scrape est généré par le service minio-metrics-token.
     ports:
-      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
-      # Bind loopback : console d'admin MinIO, accès distant via tunnel SSH.
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
     networks:
