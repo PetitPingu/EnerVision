@@ -24,7 +24,7 @@ LOAD_SHIFT_THRESHOLD_RATIO = 0.9
 # considéré en creux.
 PEAK_HOURS_START = 8
 PEAK_HOURS_END = 20
-OFF_PEAK_TARGET_SLOT = "22h-6h"
+OFF_PEAK_TARGET_SLOT = "20h-8h"
 
 # En-dessous de ce seuil, le facteur de puissance implique une pénalité
 # d'énergie réactive : une compensation est recommandée.
