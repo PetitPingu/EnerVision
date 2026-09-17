@@ -137,7 +137,6 @@ export function PredictionComparisonChart({
               name="Prévision du modèle"
               stroke="var(--chart-primary)"
               strokeWidth={2.5}
-              strokeDasharray="7 5"
               dot={false}
               activeDot={{ r: 4 }}
               connectNulls={false}
@@ -177,7 +176,6 @@ export function PredictionComparisonChart({
               y2="5"
               stroke="var(--chart-primary)"
               strokeWidth={2.5}
-              strokeDasharray="6 4"
             />
           </svg>
           Prévision du modèle
