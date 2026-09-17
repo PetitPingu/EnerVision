@@ -188,6 +188,39 @@ services:
     networks:
       - enervision-net
 
+  mlflow:
+    build:
+      context: .
+      dockerfile: mlflow/Dockerfile
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      MLFLOW_DB_SCHEMA: ${MLFLOW_DB_SCHEMA:-mlflow}
+      # Réutilise le bucket "models" existant (même convention que
+      # MinioModelStore, voir apps/prediction/infrastructure/model_store) -
+      # pas de nouveau bucket : MLflow préfixe ses clés par experiment_id
+      # (numérique), MinioModelStore par model_name, aucune collision.
+      MINIO_MODELS_BUCKET: ${MINIO_MODELS_BUCKET:-models}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - enervision-net
+
   core_api:
     build:
       # Contexte élargi à la racine du repo pour pouvoir copier packages/
@@ -220,16 +253,31 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       TRAINING_DATA_SOURCE: postgres
-      MODEL_STORE: minio
+      # MinioModelStore reste disponible (MODEL_STORE=minio) mais n'est plus
+      # utilisé par défaut - voir docs/model-registry.md.
+      MODEL_STORE: mlflow
       MODEL_NAME: energy-consumption
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_MODELS_BUCKET: ${MINIO_MODELS_BUCKET:-models}
+      # Le client MLflow parle directement à MinIO (mêmes identifiants que
+      # ci-dessus) pour lire/écrire les artefacts, le tracking server ne les
+      # proxie pas.
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+      # "models" (bucket.minio:9000) ne résout pas en DNS - force l'addressing
+      # style "path" (cf. mlflow/entrypoint.sh, même besoin côté serveur).
+      AWS_CONFIG_FILE: /app/aws_config
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      mlflow:
         condition: service_healthy
     networks:
       - enervision-net

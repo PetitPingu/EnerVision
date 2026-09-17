@@ -92,6 +92,12 @@ def load_latest(model_name) -> (pipeline, metadata)
 | Implémentation | Fichier | Usage |
 |---|---|---|
 | `MinioModelStore` | `model_store/minio_store.py` | Bucket `models` (S3-compatible) |
+| `MlflowModelStore` | `model_store/mlflow_store.py` | Model Registry MLflow (voir [model-registry.md](model-registry.md)) |
+
+Bascule via `MODEL_STORE` (`minio` si la variable n'est pas définie, mais
+`docker-compose.yml` fixe explicitement `mlflow` pour le service
+`prediction`) — les deux implémentations coexistent, aucune n'a été
+supprimée.
 
 **Structure MinIO :**
 
@@ -167,12 +173,12 @@ sequenceDiagram
 | Composant | Doc cible (`archi_infra.md`) | État actuel |
 |---|---|---|
 | Source données | `readings_curated` | OK |
-| Persistance modèle | MLflow → MinIO | MinIO direct (option A) |
+| Persistance modèle | MLflow → MinIO | `MlflowModelStore` actif par défaut (`MODEL_STORE=mlflow` dans docker-compose.yml) ; `MinioModelStore` reste disponible — voir [model-registry.md](model-registry.md) |
 | Réentraînement | Cron 24h interne | Script manuel |
-| Inférence | `/predict` + modèle en RAM | Non implémenté |
+| Inférence | `/predict` + modèle en RAM | `/predict` et `/predict/range` implémentés, rechargent le modèle à chaque appel (pas de cache en RAM) |
 
-MLflow reste prévu en phase 2 ; seule l'implémentation de `ModelStorePort`
-changerait, pas le reste du service.
+Écart restant avec la doc cible : pas de cron de réentraînement automatique,
+pas de cache du modèle en mémoire entre les appels.
 
 ## Dépendances partagées
 
