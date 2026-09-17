@@ -77,12 +77,12 @@ export function PredictionComparisonChart({
               <linearGradient id="predictionAreaFill" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="0%"
-                  stopColor="var(--chart-primary)"
+                  stopColor="#3b82f6"
                   stopOpacity={0.3}
                 />
                 <stop
                   offset="100%"
-                  stopColor="var(--chart-gradient-end)"
+                  stopColor="#93c5fd"
                   stopOpacity={0.03}
                 />
               </linearGradient>
@@ -125,7 +125,7 @@ export function PredictionComparisonChart({
               type="monotone"
               dataKey="actual_kw"
               name="Consommation mesurée"
-              stroke="var(--chart-primary)"
+              stroke="#3b82f6"
               strokeWidth={2.5}
               dot={false}
               activeDot={{ r: 4 }}
@@ -135,9 +135,8 @@ export function PredictionComparisonChart({
               type="monotone"
               dataKey="predicted_kw"
               name="Prévision du modèle"
-              stroke="var(--chart-primary)"
+              stroke="#8b5cf6"
               strokeWidth={2.5}
-              strokeDasharray="7 5"
               dot={false}
               activeDot={{ r: 4 }}
               connectNulls={false}
@@ -165,7 +164,7 @@ export function PredictionComparisonChart({
 
       <div className="mt-3 flex items-center gap-8 border-t border-zinc-100 pt-4">
         <div className="flex items-center gap-2 text-sm font-medium text-zinc-600">
-          <span className="h-1 w-6 rounded-sm bg-[var(--chart-primary)]" />
+          <span className="h-1 w-6 rounded-sm bg-[#3b82f6]" />
           Consommation mesurée
         </div>
         <div className="flex items-center gap-2 text-sm font-medium text-zinc-600">
@@ -175,9 +174,8 @@ export function PredictionComparisonChart({
               y1="5"
               x2="24"
               y2="5"
-              stroke="var(--chart-primary)"
+              stroke="#8b5cf6"
               strokeWidth={2.5}
-              strokeDasharray="6 4"
             />
           </svg>
           Prévision du modèle
