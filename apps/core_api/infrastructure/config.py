@@ -22,3 +22,5 @@ class Config:
     API_BASE_URL = f"{API_SCHEME}://{API_HOST}:{API_PORT}" if API_PORT else f"{API_SCHEME}://{API_HOST}"
 
     REQUEST_TIMEOUT = float(os.environ.get("ENERVISION_REQUEST_TIMEOUT", "5"))
+
+    PREDICTION_URL = os.environ.get("PREDICTION_URL", "http://localhost:8002")

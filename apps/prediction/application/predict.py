@@ -19,6 +19,17 @@ class InvalidPredictionRangeError(Exception):
     """La plage de prédiction demandée est invalide ou dépasse la limite autorisée."""
 
 
+class InvalidIntervalError(Exception):
+    """L'intervalle demandé n'est pas supporté (minute | hour)."""
+
+
+_INTERVALS: dict[str, tuple[str, int]] = {
+    # interval -> (fréquence pandas, minutes par point)
+    "minute": ("min", 1),
+    "hour": ("h", 60),
+}
+
+
 @dataclass(frozen=True)
 class PredictionResult:
     """Résultat d'une inférence sur un site et un instant cible."""
@@ -39,11 +50,12 @@ class PredictionPoint:
 
 @dataclass(frozen=True)
 class PredictionRangeResult:
-    """Résultat d'une inférence minute par minute sur une plage temporelle."""
+    """Résultat d'une inférence sur une plage temporelle, à l'intervalle demandé."""
 
     site_id: str
     start_time: datetime
     end_time: datetime
+    interval: str
     model_version: str
     predictions: tuple[PredictionPoint, ...]
 
@@ -73,10 +85,18 @@ def predict_range(
     site_id: str,
     start_time: datetime,
     end_time: datetime,
+    interval: str = "minute",
     max_minutes: int = Config.MAX_PREDICTION_RANGE_MINUTES,
 ) -> PredictionRangeResult:
-    """Prédit la consommation minute par minute entre start_time et end_time (inclus)."""
-    timestamps = _generate_minute_range(start_time, end_time, max_minutes)
+    """Prédit la consommation entre start_time et end_time (inclus).
+
+    `interval` contrôle le pas de la série retournée : "minute" (défaut,
+    comportement historique) ou "hour" pour une agrégation horaire — utile
+    pour les vues longue durée (ex. semaine), qui n'ont pas besoin de la
+    granularité minute et évitent ainsi de faire tourner le modèle sur des
+    milliers de points inutiles.
+    """
+    timestamps = _generate_timestamp_range(start_time, end_time, interval, max_minutes)
     pipeline, metadata = _load_latest_model(model_store, model_name)
     x = _build_prediction_input(site_id, timestamps)
     predicted_values = pipeline.predict(x)
@@ -93,6 +113,7 @@ def predict_range(
         site_id=site_id,
         start_time=start_time,
         end_time=end_time,
+        interval=interval,
         model_version=metadata.trained_at,
         predictions=predictions,
     )
@@ -110,23 +131,31 @@ def _load_latest_model(
         ) from exc
 
 
-def _generate_minute_range(
+def _generate_timestamp_range(
     start_time: datetime,
     end_time: datetime,
+    interval: str,
     max_minutes: int,
 ) -> pd.DatetimeIndex:
     if start_time > end_time:
         raise InvalidPredictionRangeError("start_time must be before end_time")
 
+    if interval not in _INTERVALS:
+        raise InvalidIntervalError(
+            f"interval must be one of {sorted(_INTERVALS)}, got '{interval}'"
+        )
+    freq, minutes_per_point = _INTERVALS[interval]
+    max_points = max_minutes // minutes_per_point
+
     timestamps = pd.date_range(
         start=start_time,
         end=end_time,
-        freq="min",
+        freq=freq,
         inclusive="both",
     )
-    if len(timestamps) > max_minutes:
+    if len(timestamps) > max_points:
         raise InvalidPredictionRangeError(
-            f"range exceeds maximum of {max_minutes} minutes"
+            f"range exceeds maximum of {max_points} points at interval '{interval}'"
         )
 
     return timestamps

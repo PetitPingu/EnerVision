@@ -16,14 +16,22 @@ function mapReading(raw: ApiConsumptionReading): ConsumptionReading {
   };
 }
 
+type ReadingsRange = {
+  startTime?: string;
+  endTime?: string;
+};
+
 export async function getConsumptionReadings(
   siteId: string,
+  range?: ReadingsRange,
 ): Promise<ConsumptionReading[]> {
   const { data } = await apiClient.get<ApiConsumptionReading[]>(
     READINGS_ENDPOINT,
     {
       params: {
         site_id: siteId,
+        start_time: range?.startTime,
+        end_time: range?.endTime,
         limit: READINGS_LIMIT,
       },
     },

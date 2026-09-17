@@ -83,6 +83,7 @@ def test_predict_range_returns_predictions(monkeypatch):
             site_id="SITE001",
             start_time=start,
             end_time=end,
+            interval="minute",
             model_version="2026-09-16T14-30-00Z",
             predictions=(
                 PredictionPoint(
@@ -113,6 +114,7 @@ def test_predict_range_returns_predictions(monkeypatch):
         "site_id": "SITE001",
         "start_time": "2026-09-17T08:00:00Z",
         "end_time": "2026-09-17T08:01:00Z",
+        "interval": "minute",
         "model_version": "2026-09-16T14-30-00Z",
         "count": 2,
         "predictions": [

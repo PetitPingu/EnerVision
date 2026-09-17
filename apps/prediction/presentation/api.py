@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Query
 
 from application.predict import (
+    InvalidIntervalError,
     InvalidPredictionRangeError,
     ModelNotLoadedError,
     predict as run_predict,
@@ -92,8 +93,13 @@ def predict_range(
         description="Fin de la plage au format ISO8601 (inclus)",
         examples=["2026-09-17T12:00:00Z"],
     ),
+    interval: str = Query(
+        "minute",
+        description="Pas de la série retournée : 'minute' (défaut) ou 'hour'",
+        examples=["minute", "hour"],
+    ),
 ) -> dict:
-    """Prédit la consommation (kWh) minute par minute entre deux instants."""
+    """Prédit la consommation (kWh) entre deux instants, minute par minute ou heure par heure."""
     parsed_start = _parse_iso8601(start_time)
     if parsed_start is None:
         raise HTTPException(status_code=422, detail="start_time must be ISO8601")
@@ -109,7 +115,10 @@ def predict_range(
             site_id=site_id,
             start_time=parsed_start,
             end_time=parsed_end,
+            interval=interval,
         )
+    except InvalidIntervalError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     except InvalidPredictionRangeError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except ModelNotLoadedError:
@@ -119,6 +128,7 @@ def predict_range(
         "site_id": result.site_id,
         "start_time": _format_iso8601(result.start_time),
         "end_time": _format_iso8601(result.end_time),
+        "interval": result.interval,
         "model_version": result.model_version,
         "count": len(result.predictions),
         "predictions": [
