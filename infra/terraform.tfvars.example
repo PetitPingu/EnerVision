@@ -1,0 +1,52 @@
+# Copier ce fichier vers terraform.tfvars et adapter les valeurs.
+#   cp terraform.tfvars.example terraform.tfvars   (Linux/macOS)
+#   copy terraform.tfvars.example terraform.tfvars (Windows)
+#
+# terraform.tfvars est ignoré par git (secrets). Voir aussi le .env racine
+# pour docker compose — les noms diffèrent, voir le tableau dans le README
+# ou la doc infra.
+
+# --- Accès local (outputs, dashboard build) ---
+# host = "localhost"
+
+# --- PostgreSQL / TimescaleDB (.env : POSTGRES_*) ---
+db_user     = "enervision"
+db_password = "CHANGEME"
+db_name     = "enervision"
+# postgres_port = 5432
+
+# --- MinIO (.env : MINIO_*) ---
+minio_root_user     = "enervision"
+minio_root_password = "CHANGEME"
+minio_buckets       = "raw,processed,models,backups"
+# minio_raw_bucket    = "raw"
+# minio_models_bucket = "models"
+# minio_port          = 9000
+# minio_console_port  = 9001
+
+# --- API mock EnerVision (.env : ENERVISION_API_*) ---
+# Utiliser l'hôte réel : les conteneurs Docker n'atteignent pas localhost.
+enervision_api_scheme   = "https"
+enervision_api_host     = "api-mock.charlieandre.fr"
+enervision_api_port     = ""
+enervision_api_username = "votre_identifiant"
+enervision_api_password = "CHANGEME"
+
+# --- Worker ETL ---
+# etl_poll_interval_seconds = 60
+
+# --- Dashboard Next.js (.env : NEXT_PUBLIC_API_BFF_URL) ---
+# URL vue depuis le navigateur (core_api sur l'hôte). Rebuild requis si modifié :
+#   terraform apply -replace="terraform_data.build_dashboard"
+dashboard_api_bff_url = "http://localhost:8000"
+
+# --- Ports exposés (optionnel, défauts dans variables.tf) ---
+# core_api_port       = 8000
+# prediction_port     = 8001
+# recommendation_port = 8002
+# dashboard_port      = 3000
+# mlflow_port         = 5000
+# redis_port          = 6379
+
+# --- Docker (Windows : npipe, Linux : unix socket, VM distante : ssh) ---
+# docker_host = "npipe:////./pipe/dockerDesktopLinuxEngine"
