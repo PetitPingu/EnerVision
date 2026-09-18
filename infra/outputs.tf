@@ -63,18 +63,34 @@ output "dashboard_api_bff_url" {
   value       = local.dashboard_api_bff_url
 }
 
+output "traefik_url" {
+  description = "URL de l'API via Traefik (entrypoint web, port 80)"
+  value       = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}"
+}
+
+output "traefik_dashboard_url" {
+  description = "URL du dashboard Traefik (Host: traefik.localhost)"
+  value       = "http://traefik.localhost:${var.traefik_dashboard_port}"
+}
+
 output "service_urls" {
   description = "Récapitulatif des URLs exposées sur l'hôte"
   value = {
-    dashboard      = "http://${var.host}:${var.dashboard_port}"
-    core_api       = "http://${var.host}:${var.core_api_port}"
-    prediction     = "http://${var.host}:${var.prediction_port}"
-    recommendation = "http://${var.host}:${var.recommendation_port}"
-    mlflow         = "http://${var.host}:${var.mlflow_port}"
-    minio_api      = "http://${var.host}:${var.minio_port}"
-    minio_console  = "http://${var.host}:${var.minio_console_port}"
-    postgres       = "postgresql://${var.db_user}@${var.host}:${var.postgres_port}/${var.db_name}"
-    redis          = "redis://${var.host}:${var.redis_port}"
+    traefik_api        = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}"
+    traefik_dashboard  = "http://traefik.localhost:${var.traefik_dashboard_port}"
+    dashboard          = "http://dashboard.localhost${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}"
+    dashboard_direct   = "http://${var.host}:${var.dashboard_port}"
+    core_api_traefik   = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}/"
+    core_api_direct    = "http://${var.host}:${var.core_api_port}"
+    prediction_traefik = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}/prediction"
+    prediction_direct  = "http://${var.host}:${var.prediction_port}"
+    recommendation_traefik = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}/recommendation"
+    recommendation_direct  = "http://${var.host}:${var.recommendation_port}"
+    mlflow             = "http://${var.host}:${var.mlflow_port}"
+    minio_api          = "http://${var.host}:${var.minio_port}"
+    minio_console      = "http://${var.host}:${var.minio_console_port}"
+    postgres           = "postgresql://${var.db_user}@${var.host}:${var.postgres_port}/${var.db_name}"
+    redis              = "redis://${var.host}:${var.redis_port}"
   }
 }
 
@@ -90,6 +106,7 @@ output "internal_service_hosts" {
     recommendation = docker_container.recommendation.name
     etl_worker     = docker_container.etl_worker.name
     dashboard      = docker_container.dashboard.name
+    traefik        = docker_container.traefik.name
   }
 }
 

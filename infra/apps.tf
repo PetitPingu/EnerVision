@@ -146,6 +146,7 @@ resource "docker_container" "core_api" {
     "DATABASE_URL=${local.database_url}",
     "PREDICTION_URL=http://prediction:8000",
     "RECOMMENDATION_URL=http://recommendation:8000",
+    "CORS_ORIGINS=${var.cors_origins}",
     "ENERVISION_API_SCHEME=${var.enervision_api_scheme}",
     "ENERVISION_API_HOST=${var.enervision_api_host}",
     "ENERVISION_API_PORT=${var.enervision_api_port}",

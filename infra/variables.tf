@@ -4,6 +4,31 @@ variable "docker_host" {
   description = "URI du démon Docker (local ou SSH)"
 }
 
+variable "docker_socket_path" {
+  type        = string
+  default     = "/var/run/docker.sock"
+  description = "Chemin du socket Docker monté dans Traefik (Docker Desktop Linux : /var/run/docker.sock)"
+}
+
+variable "traefik_http_port" {
+  type        = number
+  default     = 80
+  description = "Port HTTP exposé par Traefik (entrypoint web)"
+}
+
+variable "traefik_dashboard_port" {
+  type        = number
+  default     = 8080
+  description = "Port du dashboard Traefik (entrypoint traefik)"
+}
+
+variable "traefik_dashboard_basic_auth_users" {
+  type        = string
+  default     = "admin:$$apr1$$SFOMPty7$$gIWm8tIUjfrD71YDXaH.r."
+  sensitive   = true
+  description = "Utilisateurs basic auth du dashboard Traefik (format htpasswd). Défaut : admin / admin"
+}
+
 variable "host" {
   type        = string
   default     = "localhost"
@@ -167,4 +192,10 @@ variable "enervision_api_password" {
   default     = ""
   sensitive   = true
   description = "Mot de passe API mock EnerVision"
+}
+
+variable "cors_origins" {
+  type        = string
+  default     = "http://localhost:3000,http://127.0.0.1:3000,http://dashboard.localhost,http://localhost"
+  description = "Origines CORS autorisées par core_api (séparées par des virgules)"
 }

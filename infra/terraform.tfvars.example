@@ -35,8 +35,18 @@ enervision_api_password = "CHANGEME"
 # --- Worker ETL ---
 # etl_poll_interval_seconds = 60
 
+# --- Traefik (.env : TRAEFIK_*) ---
+# traefik_http_port      = 80
+# traefik_dashboard_port = 8080
+# docker_socket_path     = "/var/run/docker.sock"
+
+# --- CORS core_api (.env : CORS_ORIGINS) ---
+# Ajouter toute origine depuis laquelle le dashboard appelle l'API.
+# cors_origins = "http://localhost:3000,http://dashboard.localhost,http://localhost"
+
 # --- Dashboard Next.js (.env : NEXT_PUBLIC_API_BFF_URL) ---
-# URL vue depuis le navigateur (core_api sur l'hôte). Rebuild requis si modifié :
+# Accès direct (simple) : http://localhost:8000
+# Via Traefik (port 80) : http://localhost — rebuild requis si modifié :
 #   terraform apply -replace="terraform_data.build_dashboard"
 dashboard_api_bff_url = "http://localhost:8000"
 
