@@ -15,4 +15,4 @@ EXPOSE 8000
 # Applique les migrations Alembic avant de démarrer, pour que le schéma
 # existe dès le premier `docker compose up`. Le schéma vit dans
 # packages/db-schema (partagé avec core_api), idempotent si déjà appliqué.
-CMD ["sh", "-c", "alembic -c /packages/db-schema/alembic.ini upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "sh /packages/db-schema/wait-for-postgres.sh && alembic -c /packages/db-schema/alembic.ini upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]

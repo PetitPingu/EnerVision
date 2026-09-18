@@ -17,4 +17,4 @@ EXPOSE 8000
 # Le schéma vit dans packages/db-schema (partagé, pas propre à core_api) :
 # n'importe quel autre service peut appliquer ces migrations de la même
 # façon, sans dépendre du démarrage de core_api.
-CMD ["sh", "-c", "alembic -c /packages/db-schema/alembic.ini upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "sh /packages/db-schema/wait-for-postgres.sh && alembic -c /packages/db-schema/alembic.ini upgrade head && uvicorn presentation.api:app --host 0.0.0.0 --port 8000"]
