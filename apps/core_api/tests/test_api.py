@@ -40,6 +40,16 @@ def _client(
     )
     monkeypatch.setattr(api, "recommendation_api", mock_recommendation_api)
 
+    # Ces tests portent sur la logique métier des routes, pas sur l'auth ni
+    # le filtrage par site (voir tests/test_auth.py et test_admin.py) : on
+    # neutralise require_auth avec un admin, qui voit tout sans filtrage
+    # (voir _permitted_site_ids).
+    monkeypatch.setitem(
+        api.app.dependency_overrides,
+        api.require_auth,
+        lambda: api.CurrentUser(email="test@example.com", role="admin", user_id=None),
+    )
+
     return TestClient(api.app), mock_api, mock_recommendation_api
 
 

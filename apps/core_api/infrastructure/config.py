@@ -25,3 +25,11 @@ class Config:
 
     PREDICTION_URL = os.environ.get("PREDICTION_URL", "http://localhost:8002")
     RECOMMENDATION_URL = os.environ.get("RECOMMENDATION_URL", "http://localhost:8003")
+
+    # JWT (voir docs/seq_auth_token.md). Le défaut n'est valable qu'en dev :
+    # tout déploiement réel doit fournir JWT_SECRET_KEY explicitement.
+    JWT_SECRET_KEY = os.environ.get(
+        "JWT_SECRET_KEY", "dev-insecure-secret-change-me-in-production-32chars"
+    )
+    JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "30"))

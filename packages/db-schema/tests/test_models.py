@@ -10,6 +10,8 @@ def test_registers_one_table_per_entity_in_the_enervision_schema():
         "enervision.alerts",
         "enervision.readings_curated",
         "enervision.recommendations",
+        "enervision.users",
+        "enervision.user_sites",
     }
     assert all(table.schema == "enervision" for table in tables.values())
 
@@ -58,3 +60,28 @@ def test_recommendations_references_model_version_and_estimated_gain():
 
     assert columns["model_version"].nullable
     assert columns["estimated_gain_kwh"].nullable
+
+
+def test_users_primary_key_is_id():
+    pk_columns = [c.name for c in orm_models.User.__table__.primary_key.columns]
+
+    assert pk_columns == ["id"]
+
+
+def test_users_email_is_unique_and_not_nullable():
+    column = orm_models.User.__table__.columns["email"]
+
+    assert column.unique
+    assert not column.nullable
+
+
+def test_users_role_is_nullable():
+    column = orm_models.User.__table__.columns["role"]
+
+    assert column.nullable
+
+
+def test_user_sites_primary_key_is_composite():
+    pk_columns = [c.name for c in orm_models.UserSite.__table__.primary_key.columns]
+
+    assert pk_columns == ["user_id", "site_id"]

@@ -6,9 +6,10 @@ package partagé indépendant de toute app, installable par `core_api`,
 `etl_worker` ou n'importe quel autre service) : clé naturelle `site_id`
 (text, l'identifiant renvoyé par l'API mock, ex. `SITE001`), pas d'UUID —
 plus simple à corréler directement avec les payloads de l'API et les
-objets MinIO sans jointure supplémentaire. `USERS`, `PREDICTIONS` et
-`RECOMMENDATIONS` restent des propositions non implémentées, à confirmer
-avec l'équipe.
+objets MinIO sans jointure supplémentaire. `USERS` est désormais
+implémentée (voir `packages/db-schema/alembic/versions/c54505b1fc62_create_users_table.py`).
+`PREDICTIONS` reste une proposition non implémentée, à confirmer avec
+l'équipe.
 
 SITES — les entités métier de base, telles que renvoyées par l'API mock : nom, type, capacité, localisation, statut.
 
@@ -20,7 +21,7 @@ PREDICTIONS *(proposé)* — écrites par le worker/service Prediction toutes le
 
 RECOMMENDATIONS *(proposé)* — prediction_id est nullable parce qu'une recommandation peut aussi naître d'un état courant critique sans passer par une prédiction (ex. data_quality: critical détecté en direct) — pas seulement d'un pic anticipé.
 
-USERS *(proposé)* — table d'authentification, volontairement isolée du reste : email (unique), password_hash (jamais le mot de passe en clair, bcrypt/argon2 côté FastAPI), role (ex. admin/viewer). Elle ne référence aucune autre table — c'est l'hypothèse que je veux qu'on confirme ensemble.
+USERS — table d'authentification, volontairement isolée du reste : email (unique), password_hash (jamais le mot de passe en clair, bcrypt/argon2 côté FastAPI), role (ex. admin/viewer). Elle ne référence aucune autre table.
 
 #### Mermaid
 
