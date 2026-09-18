@@ -14,8 +14,7 @@ modèles, etc.
 ## Démarrage
 
 ```bash
-cp .env.example .env
-# ajuster les identifiants dans .env si besoin
+# créer un .env à la racine (aucun .env.example versionné, voir plus bas)
 docker compose up -d
 ```
 
@@ -35,7 +34,12 @@ docker compose ps
 | minio-init   | Job ponctuel qui crée les buckets         | — |
 
 Les identifiants (utilisateur/mot de passe PostgreSQL, clés MinIO) et les
-ports sont configurables via le fichier `.env` (voir `.env.example`).
+ports sont configurables via le fichier `.env` à la racine — variables
+listées dans `docker-compose.yml` (`POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`POSTGRES_DB`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BUCKETS`,
+etc.). Aucun `.env.example` n'est versionné (`.env` et `.env.example` sont
+tous les deux dans `.gitignore`) : se référer à `docker-compose.yml` et aux
+`infrastructure/config.py` de chaque service pour la liste à jour.
 
 ## TimescaleDB
 

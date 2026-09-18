@@ -67,7 +67,7 @@ Docker comme apps Python en local) — pas de `.env` séparé dans
 `apps/etl_worker`.
 
 ```bash
-cp .env.example .env   # à la racine, si ce n'est pas déjà fait — puis ajuster si besoin
+# .env à la racine (aucun .env.example versionné, voir docs/data-storage.md)
 cd apps/etl_worker
 python -m pip install -r requirements.txt -r requirements-dev.txt
 python main.py
