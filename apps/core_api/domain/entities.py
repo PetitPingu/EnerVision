@@ -45,3 +45,24 @@ class Alert:
     message: str | None = None
     value: float | None = None
     threshold: float | None = None
+
+
+@dataclass(frozen=True)
+class AlertEvent:
+    """Une transition data_quality publiée par etl_worker sur Redis Streams."""
+
+    event_id: str
+    site_id: str
+    timestamp: str
+    data_quality: str
+    null_reasons: list = field(default_factory=list)
+
+    @property
+    def kind(self) -> str:
+        """"recovery" (good), "minor_alert" (partial : souci mineur identifié
+        mais réel), sinon "alert" (degraded/critical)."""
+        if self.data_quality == "good":
+            return "recovery"
+        if self.data_quality == "partial":
+            return "minor_alert"
+        return "alert"

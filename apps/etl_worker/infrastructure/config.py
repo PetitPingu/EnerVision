@@ -29,3 +29,8 @@ class Config:
     MINIO_SECURE = os.environ.get("MINIO_SECURE", "false").lower() == "true"
 
     POLL_INTERVAL_SECONDS = int(os.environ.get("ETL_POLL_INTERVAL_SECONDS", "60"))
+
+    # Redis Streams (alert.detected) : REDIS_HOST vaut "redis" sous
+    # docker-compose (nom du service), "localhost" en dev hors compose.
+    REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+    REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))

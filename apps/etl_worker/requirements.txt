@@ -6,3 +6,4 @@
 python-dotenv>=1.0
 APScheduler>=3.10
 minio>=7.2
+redis>=5.0

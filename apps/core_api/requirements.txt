@@ -7,3 +7,4 @@ python-dotenv>=1.0
 fastapi>=0.110
 uvicorn[standard]>=0.29
 requests>=2.31
+redis>=5.0.1

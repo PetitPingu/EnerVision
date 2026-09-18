@@ -236,6 +236,8 @@ services:
       ENERVISION_API_PORT: ${ENERVISION_API_PORT}
       ENERVISION_API_USERNAME: ${ENERVISION_API_USERNAME}
       ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
     depends_on:
       postgres:
         condition: service_healthy
@@ -243,6 +245,8 @@ services:
         condition: service_started
       recommendation:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - enervision-net
     labels:
@@ -339,10 +343,14 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET:-raw}
       ETL_POLL_INTERVAL_SECONDS: ${ETL_POLL_INTERVAL_SECONDS:-60}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
     depends_on:
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - enervision-net

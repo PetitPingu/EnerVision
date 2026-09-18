@@ -7,7 +7,7 @@ dépendance).
 
 from abc import ABC, abstractmethod
 
-from domain.entities import Alert, Reading, Site
+from domain.entities import Alert, AlertEvent, Reading, Site
 
 
 class SensorApiPort(ABC):
@@ -38,3 +38,22 @@ class SensorApiPort(ABC):
     @abstractmethod
     def get_sensors_status(self) -> dict:
         """État de santé des capteurs par site. Retourne {} si indisponible."""
+
+
+class AlertStreamPort(ABC):
+    """Accès au flux temps réel des transitions data_quality (Redis Streams)."""
+
+    @abstractmethod
+    async def read_new(self, last_id: str, block_ms: int) -> list[AlertEvent]:
+        """Lit les entrées publiées après last_id (exclusif). Bloque jusqu'à
+        block_ms millisecondes si rien de nouveau. Retourne [] au timeout ou
+        si la source est indisponible — ne lève jamais."""
+
+
+class ActiveAlertsPort(ABC):
+    """Accès à l'état courant (pas au flux) des sites partial/degraded/critical."""
+
+    @abstractmethod
+    def get_active(self) -> list[AlertEvent]:
+        """Snapshot des sites actuellement partial/degraded/critical (dernière
+        lecture connue par site). Retourne [] si la source est indisponible."""
