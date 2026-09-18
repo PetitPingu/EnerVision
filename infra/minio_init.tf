@@ -4,11 +4,11 @@ resource "docker_image" "minio_mc" {
 }
 
 resource "docker_container" "minio_init" {
-  name      = "minio-init"
-  image     = docker_image.minio_mc.image_id
-  must_run  = false
-  restart   = "no"
-  rm        = true
+  name       = "minio-init"
+  image      = docker_image.minio_mc.image_id
+  must_run   = false
+  restart    = "no"
+  rm         = true
   entrypoint = ["/bin/sh", "-c"]
   command = [
     <<-EOT

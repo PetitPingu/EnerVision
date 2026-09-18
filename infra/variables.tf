@@ -199,3 +199,22 @@ variable "cors_origins" {
   default     = "http://localhost:3000,http://127.0.0.1:3000,http://dashboard.localhost,http://localhost"
   description = "Origines CORS autorisées par core_api (séparées par des virgules)"
 }
+
+variable "prometheus_port" {
+  type        = number
+  default     = 9090
+  description = "Port loopback pour Prometheus (127.0.0.1 uniquement)"
+}
+
+variable "grafana_admin_user" {
+  type        = string
+  default     = "admin"
+  description = "Identifiant administrateur Grafana"
+}
+
+variable "grafana_admin_password" {
+  type        = string
+  default     = "changeme"
+  sensitive   = true
+  description = "Mot de passe administrateur Grafana"
+}

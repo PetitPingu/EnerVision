@@ -4,8 +4,8 @@ resource "docker_image" "traefik" {
 }
 
 resource "docker_container" "traefik" {
-  name    = "traefik"
-  image   = docker_image.traefik.image_id
+  name  = "traefik"
+  image = docker_image.traefik.image_id
   command = [
     "--providers.docker=true",
     "--providers.docker.exposedbydefault=false",
