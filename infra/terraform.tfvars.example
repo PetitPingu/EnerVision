@@ -63,5 +63,9 @@ dashboard_api_bff_url = "http://localhost:8000"
 # mlflow_port         = 5000
 # redis_port          = 6379
 
-# --- Docker (Windows : npipe, Linux : unix socket, VM distante : ssh) ---
-# docker_host = "npipe:////./pipe/dockerDesktopLinuxEngine"
+# --- Docker ---
+# Windows (Docker Desktop) : npipe:////./pipe/dockerDesktopLinuxEngine
+# Linux (serveur)          : unix:///var/run/docker.sock
+# docker_host = "unix:///var/run/docker.sock"
+#
+# Docker Engine 29+ exige le provider kreuzwerker/docker >= 3.6.2 (voir main.tf).

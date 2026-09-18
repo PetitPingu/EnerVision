@@ -3,7 +3,8 @@ terraform {
   required_providers {
     docker = {
       source  = "kreuzwerker/docker"
-      version = "~> 3.0.0"
+      # >= 3.6.2 requis pour Docker Engine 29+ (API min 1.44)
+      version = "~> 3.6.0"
     }
   }
 }
