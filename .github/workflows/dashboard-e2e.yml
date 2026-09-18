@@ -38,9 +38,19 @@ env:
   MINIO_ROOT_USER: enervision_ci
   MINIO_ROOT_PASSWORD: enervision_ci
   MINIO_BUCKETS: raw,processed,models,backups
-  # CORS_ORIGINS et ENERVISION_API_* ont des valeurs par défaut côté
-  # core_api (cf. apps/core_api/presentation/api.py et infrastructure/config.py)
-  # compatibles avec ce run (port 3000, mock non appelé ici).
+  # CORS_ORIGINS a une valeur par défaut côté core_api compatible avec ce
+  # run (cf. apps/core_api/presentation/api.py, port 3000).
+  # ENERVISION_API_HOST/PORT doivent en revanche être fournis explicitement :
+  # docker-compose.yml les injecte tels quels (`${ENERVISION_API_HOST}`)
+  # dans le conteneur, donc sans .env local ni override ici la clé existe
+  # mais vide, ce qui empêche le fallback "localhost" de infrastructure/config.py
+  # de s'appliquer (os.environ.get ne retombe sur le défaut que si la clé
+  # est absente, pas si elle est vide).
+  ENERVISION_API_SCHEME: https
+  ENERVISION_API_HOST: api-mock.charlieandre.fr
+  ENERVISION_API_PORT: ""
+  ENERVISION_API_USERNAME: ${{ secrets.ENERVISION_API_USERNAME }}
+  ENERVISION_API_PASSWORD: ${{ secrets.ENERVISION_API_PASSWORD }}
   NEXT_PUBLIC_API_BFF_URL: http://localhost
 
 jobs:
