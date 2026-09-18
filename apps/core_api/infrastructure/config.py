@@ -23,6 +23,13 @@ class Config:
 
     REQUEST_TIMEOUT = float(os.environ.get("ENERVISION_REQUEST_TIMEOUT", "5"))
 
+    # Redis Streams (alert.detected, publié par etl_worker) : REDIS_HOST vaut
+    # "redis" sous docker-compose (nom du service), "localhost" en dev hors
+    # compose.
+    REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+    REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+    ALERT_STREAM_BLOCK_MS = int(os.environ.get("ALERT_STREAM_BLOCK_MS", "15000"))
+
     PREDICTION_URL = os.environ.get("PREDICTION_URL", "http://localhost:8002")
     RECOMMENDATION_URL = os.environ.get("RECOMMENDATION_URL", "http://localhost:8003")
 

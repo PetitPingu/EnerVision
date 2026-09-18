@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from domain.entities import Site
+from domain.entities import AlertEvent, Site
 from fastapi.testclient import TestClient
 from presentation import api
 
@@ -18,6 +18,23 @@ def _client_as(monkeypatch, role, permitted_site_ids=()):
     mock_prediction_api = Mock()
     mock_prediction_api.get_prediction_range.return_value = {"predictions": []}
     monkeypatch.setattr(api, "prediction_api", mock_prediction_api)
+
+    mock_active_alerts_reader = Mock()
+    mock_active_alerts_reader.get_active.return_value = [
+        AlertEvent(
+            event_id="snapshot:SITE001:2026-01-01T00:00:00",
+            site_id="SITE001",
+            timestamp="2026-01-01T00:00:00",
+            data_quality="critical",
+        ),
+        AlertEvent(
+            event_id="snapshot:SITE002:2026-01-01T00:00:00",
+            site_id="SITE002",
+            timestamp="2026-01-01T00:00:00",
+            data_quality="degraded",
+        ),
+    ]
+    monkeypatch.setattr(api, "active_alerts_reader", mock_active_alerts_reader)
 
     mock_site_access_repo = Mock()
     mock_site_access_repo.get_site_ids.return_value = list(permitted_site_ids)
@@ -89,3 +106,21 @@ def test_viewer_forbidden_from_predictions_for_an_unassigned_site(monkeypatch):
 
     assert response.status_code == 403
     mock_prediction_api.get_prediction_range.assert_not_called()
+
+
+def test_admin_sees_active_alerts_for_every_site(monkeypatch):
+    client, _ = _client_as(monkeypatch, role="admin", permitted_site_ids=[])
+
+    response = client.get("/api/v1/alerts/active")
+
+    assert response.status_code == 200
+    assert {event["site_id"] for event in response.json()} == {"SITE001", "SITE002"}
+
+
+def test_viewer_only_sees_active_alerts_for_assigned_sites(monkeypatch):
+    client, _ = _client_as(monkeypatch, role="viewer", permitted_site_ids=["SITE001"])
+
+    response = client.get("/api/v1/alerts/active")
+
+    assert response.status_code == 200
+    assert [event["site_id"] for event in response.json()] == ["SITE001"]

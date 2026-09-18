@@ -1,8 +1,10 @@
 """Session SQLAlchemy synchrone vers la base partagée (packages/db-schema).
 
-Session synchrone plutôt que le moteur async de db_schema.database : les
-routes FastAPI de ce service sont toutes en `def` (pas `async def`), même
-raisonnement que apps/recommendation/infrastructure/session.py.
+Session synchrone plutôt que le moteur async de db_schema.database : core_api
+a bien des routes `async def` par ailleurs (ex. la route SSE des alertes),
+mais chaque accès à cette session reste un aller-retour one-shot par requête
+HTTP, pas un flux — pas besoin d'un moteur async pour ça (même choix que
+apps/recommendation/infrastructure/session.py).
 """
 
 from collections.abc import Iterator

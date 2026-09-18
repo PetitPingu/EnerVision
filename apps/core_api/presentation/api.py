@@ -10,14 +10,19 @@ Lancer en local (depuis apps/core_api) :
 Puis ouvrir http://127.0.0.1:8001/docs pour explorer les endpoints.
 """
 
+import json
 import os
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import NamedTuple
 
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, Query
+from domain.entities import AlertEvent
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from infrastructure.active_alerts_reader import PostgresActiveAlertsReader
 from infrastructure.api_client import ApiMockClient
 from infrastructure.auth import (
     create_access_token,
@@ -25,18 +30,30 @@ from infrastructure.auth import (
     hash_password,
     verify_password,
 )
+from infrastructure.config import Config
 from infrastructure.login_throttle import is_locked_out, record_failed_attempt, reset_attempts
 from infrastructure.password_policy import WeakPasswordError, validate_password_strength
 from infrastructure.prediction_client import PredictionApiClient
 from infrastructure.recommendation_client import RecommendationApiClient
+from infrastructure.redis_alert_stream import RedisAlertStreamReader
 from infrastructure.site_access_repository import SqlSiteAccessRepository
 from infrastructure.user_repository import SqlUserRepository
 from pydantic import BaseModel
+
+alert_stream = RedisAlertStreamReader()
+active_alerts_reader = PostgresActiveAlertsReader()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await alert_stream.close()
 
 app = FastAPI(
     title="EnerVision core_api",
     description="Relaie les endpoints de l'API mock EnerVision.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 _cors_origins = os.environ.get(
@@ -150,6 +167,8 @@ def root() -> dict:
             "/api/v1/sites/{site_id}/current",
             "/api/v1/readings",
             "/api/v1/alerts",
+            "/api/v1/alerts/stream",
+            "/api/v1/alerts/active",
             "/api/v1/sensors/status",
             "/api/v1/predictions/range",
             "/api/v1/recommendations",
@@ -264,6 +283,75 @@ def list_alerts(
     if permitted is not None:
         alerts = [a for a in alerts if a.site_id in permitted]
     return [asdict(a) for a in alerts]
+
+
+@app.get(
+    "/api/v1/alerts/active",
+    tags=["Alerts"],
+    summary="Snapshot des sites actuellement partial/degraded/critical",
+)
+def list_active_alerts(current_user: CurrentUser = Depends(require_auth)) -> list:
+    """État courant (pas le flux) : sert à amorcer la liste au chargement du
+    dashboard, avant de prendre le relais avec /api/v1/alerts/stream — un
+    site déjà partial/degraded/critical n'apparaît pas dans le flux tant
+    qu'il ne change pas de zone (anti-flood côté etl_worker).
+
+    Filtré par site autorisé comme le reste de l'API (voir
+    _permitted_site_ids) : appelé via apiClient (axios), qui porte le JWT.
+    """
+    permitted = _permitted_site_ids(current_user)
+    events = active_alerts_reader.get_active()
+    if permitted is not None:
+        events = [e for e in events if e.site_id in permitted]
+    return [_alert_event_dict(e) for e in events]
+
+
+def _alert_event_dict(event: AlertEvent) -> dict:
+    """dataclasses.asdict() ignore les propriétés calculées : kind est ajouté
+    à la main pour que le front le reçoive sans le recalculer lui-même."""
+    return {
+        "event_id": event.event_id,
+        "site_id": event.site_id,
+        "timestamp": event.timestamp,
+        "data_quality": event.data_quality,
+        "null_reasons": event.null_reasons,
+        "kind": event.kind,
+    }
+
+
+async def _sse_alert_events(request: Request, stream: RedisAlertStreamReader):
+    """Générateur SSE : un événement par transition data_quality publiée sur
+    Redis, un commentaire keep-alive quand rien de nouveau (évite qu'un proxy
+    ou le navigateur ne coupe la connexion pendant les creux)."""
+    last_id = "$"  # uniquement les événements futurs, pas de rejeu d'historique
+    while not await request.is_disconnected():
+        events = await stream.read_new(last_id, block_ms=Config.ALERT_STREAM_BLOCK_MS)
+        if not events:
+            yield ": heartbeat\n\n"
+            continue
+        for event in events:
+            yield f"event: {event.kind}\ndata: {json.dumps(_alert_event_dict(event))}\n\n"
+            last_id = event.event_id
+
+
+@app.get(
+    "/api/v1/alerts/stream",
+    tags=["Alerts"],
+    summary="Flux temps réel (SSE) des transitions data_quality",
+)
+async def stream_alert_events(request: Request) -> StreamingResponse:
+    """Diffuse en direct les transitions data_quality publiées par etl_worker
+    sur Redis Streams (alert.detected) : "alert" en entrant en degraded/
+    critical, "minor_alert" en entrant en partial, "recovery" au retour à
+    good.
+
+    Pas de require_auth ici : le front s'y connecte via EventSource
+    (apps/dashboard/src/hooks/alerts/useAlertStream.ts), qui ne permet pas
+    d'attacher un header Authorization. Contrairement à /api/v1/alerts/active,
+    ce flux reste donc non filtré par site — à revoir (jeton en query string ?)
+    si ça devient un vrai problème de confidentialité entre sites/utilisateurs.
+    """
+    return StreamingResponse(_sse_alert_events(request, alert_stream), media_type="text/event-stream")
 
 
 @app.get(
