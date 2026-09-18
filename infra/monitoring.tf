@@ -59,7 +59,7 @@ resource "docker_container" "minio_metrics_token" {
   image      = docker_image.minio_mc.image_id
   must_run   = false
   restart    = "no"
-  rm         = true
+  rm         = false
   entrypoint = ["/bin/bash", "-c"]
   command = [
     <<-EOT
