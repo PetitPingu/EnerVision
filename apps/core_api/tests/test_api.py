@@ -42,6 +42,16 @@ def _client(
     )
     monkeypatch.setattr(api, "recommendation_api", mock_recommendation_api)
 
+    # Ces tests portent sur la logique métier des routes, pas sur l'auth ni
+    # le filtrage par site (voir tests/test_auth.py et test_admin.py) : on
+    # neutralise require_auth avec un admin, qui voit tout sans filtrage
+    # (voir _permitted_site_ids).
+    monkeypatch.setitem(
+        api.app.dependency_overrides,
+        api.require_auth,
+        lambda: api.CurrentUser(email="test@example.com", role="admin", user_id=None),
+    )
+
     return TestClient(api.app), mock_api, mock_recommendation_api
 
 
@@ -138,8 +148,9 @@ def test_active_alerts_relays_active_alerts_reader(monkeypatch):
     mock_reader = Mock()
     mock_reader.get_active.return_value = [event]
     monkeypatch.setattr(api, "active_alerts_reader", mock_reader)
+    client, _, _ = _client(monkeypatch)
 
-    response = TestClient(api.app).get("/api/v1/alerts/active")
+    response = client.get("/api/v1/alerts/active")
 
     assert response.status_code == 200
     assert response.json() == [
@@ -166,8 +177,9 @@ def test_active_alerts_serializes_partial_as_minor_alert_kind(monkeypatch):
     mock_reader = Mock()
     mock_reader.get_active.return_value = [event]
     monkeypatch.setattr(api, "active_alerts_reader", mock_reader)
+    client, _, _ = _client(monkeypatch)
 
-    response = TestClient(api.app).get("/api/v1/alerts/active")
+    response = client.get("/api/v1/alerts/active")
 
     assert response.json()[0]["kind"] == "minor_alert"
 
@@ -237,6 +249,11 @@ def test_alerts_stream_route_returns_sse_content_type(monkeypatch):
     mock_stream = AsyncMock()
     monkeypatch.setattr(api, "alert_stream", mock_stream)
     monkeypatch.setattr(api.Request, "is_disconnected", AsyncMock(return_value=True))
+    # Le lifespan préchauffe le cache de sites au démarrage (cf.
+    # presentation/api.py) : on mocke sensor_api pour ne pas appeler la
+    # vraie API mock pendant ce test, qui utilise le vrai lifespan (context
+    # manager TestClient) pour le SSE.
+    monkeypatch.setattr(api, "sensor_api", Mock(get_sites=Mock(return_value=[])))
 
     with TestClient(api.app) as client:
         response = client.get("/api/v1/alerts/stream")

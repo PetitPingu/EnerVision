@@ -68,7 +68,7 @@ jobs:
       - name: Wait for core_api to be reachable through Traefik
         run: |
           for i in $(seq 1 60); do
-            if curl -sf http://localhost/api/v1/sites -o /dev/null; then
+            if curl -sf http://localhost/health -o /dev/null; then
               echo "core_api is up"
               exit 0
             fi
@@ -78,6 +78,23 @@ jobs:
           docker compose ps
           docker compose logs
           exit 1
+
+      - name: Seed sites and default admin (packages/db-schema/alembic/seeds)
+        run: |
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < packages/db-schema/alembic/seeds/seed_sites.sql
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < packages/db-schema/alembic/seeds/seed_admin_user.sql
+
+      - name: Seed extra test users for e2e (apps/dashboard/e2e/*.spec.ts)
+        # /auth/login (voir apps/core_api/presentation/api.py) n'a pas
+        # d'endpoint d'inscription public : ces comptes n'existent que dans
+        # cette base jetable, recréée à chaque run. Identifiants fixes en
+        # dur ici (pas des secrets réels) car les specs les référencent
+        # tels quels. Hash bcrypt de "testpass123" et "bobpass456".
+        run: |
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+            "INSERT INTO enervision.users (id, email, password_hash, role) VALUES (gen_random_uuid(), 'alice@example.com', '\$2b\$12\$5cz3fy9ebsUuCvt5gBja.OLPDWGqSjjlDPlE46BrL2aNWvmR8WHc2', 'admin');"
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+            "INSERT INTO enervision.users (id, email, password_hash, role) VALUES (gen_random_uuid(), 'bob@example.com', '\$2b\$12\$r/FMLj3ByQQMc2LqiqMavuB1zw9AB5wkpnvJAJu5A9xP7ObjY7UKC', 'viewer');"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

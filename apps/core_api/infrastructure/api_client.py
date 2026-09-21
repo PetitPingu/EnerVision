@@ -7,6 +7,7 @@ loggées et une valeur par défaut est retournée à l'appelant.
 """
 
 import logging
+import time
 
 from application.ports import SensorApiPort
 from domain.entities import Alert, Reading, Site
@@ -27,6 +28,8 @@ class ApiMockClient(SensorApiPort):
             base_url=base_url or Config.API_BASE_URL,
             timeout=timeout if timeout is not None else Config.REQUEST_TIMEOUT,
         )
+        self._sites_cache: list[Site] | None = None
+        self._sites_cache_at: float = 0.0
 
     @property
     def base_url(self) -> str:
@@ -37,12 +40,24 @@ class ApiMockClient(SensorApiPort):
         return self._client.timeout
 
     def get_sites(self) -> list[Site]:
+        now = time.monotonic()
+        if self._sites_cache is not None and now - self._sites_cache_at < Config.SITES_CACHE_TTL:
+            return self._sites_cache
+
         try:
             sites = self._client.get_sites()
         except MockApiError as exc:
             logger.error("Échec de l'appel à l'API mock (get_sites) : %s", exc)
-            return []
-        return [self._to_site(item) for item in sites]
+            # En cas d'échec (l'API mock répond parfois 401 sous forte charge,
+            # cf. SITES_CACHE_TTL), on préfère resservir le dernier résultat
+            # connu plutôt qu'une liste vide qui viderait les sites à l'écran.
+            # Le lifespan de l'app préchauffe ce cache au démarrage (cf.
+            # presentation/api.py) pour limiter les cas où il est encore vide.
+            return self._sites_cache if self._sites_cache is not None else []
+
+        self._sites_cache = [self._to_site(item) for item in sites]
+        self._sites_cache_at = now
+        return self._sites_cache
 
     def get_current_reading(self, site_id: str) -> Reading | None:
         try:

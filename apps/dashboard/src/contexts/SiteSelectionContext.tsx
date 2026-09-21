@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { DEFAULT_SITE_ID } from "@/config/site";
+import { useAuth } from "@/contexts/AuthContext";
 import { getSites } from "@/lib/api/sites";
 import type { Site } from "@/types/site";
 
@@ -30,6 +31,7 @@ export function SiteSelectionProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { isAuthenticated } = useAuth();
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState(DEFAULT_SITE_ID);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,7 +74,10 @@ export function SiteSelectionProvider({
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Redéclenché sur isAuthenticated : le premier appel a lieu avant que
+    // l'utilisateur ne se soit connecté (401), il faut retenter une fois le
+    // JWT disponible (voir apiClient, apps/dashboard/src/lib/api/client.ts).
+  }, [isAuthenticated]);
 
   const selectedSite = useMemo(
     () => sites.find((site) => site.site_id === selectedSiteId),
