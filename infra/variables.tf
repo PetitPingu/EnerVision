@@ -218,3 +218,21 @@ variable "grafana_admin_password" {
   sensitive   = true
   description = "Mot de passe administrateur Grafana"
 }
+
+variable "build_images_locally" {
+  type        = bool
+  default     = true
+  description = "true : build via local-exec (dev local). false : pull depuis GHCR (CI / VM)."
+}
+
+variable "image_registry_prefix" {
+  type        = string
+  default     = "ghcr.io/petitpingu/enervision"
+  description = "Préfixe GHCR des images applicatives (sans tag)"
+}
+
+variable "image_tag" {
+  type        = string
+  default     = "dev"
+  description = "Tag des images GHCR (ex. dev, main, sha-<commit>, pr-<numéro>)"
+}

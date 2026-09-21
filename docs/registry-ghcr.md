@@ -85,8 +85,35 @@ Si absente, la CI utilise `http://localhost:8000` par défaut.
 | Dashboard appelle la mauvaise API | Mauvaise URL au build | Définir `DASHBOARD_API_BFF_URL` |
 | Build échoue sur `packages/` | Contexte incorrect | Le `context` doit rester `.` (racine) |
 
+## Terraform
+
+Variables dans `infra/variables.tf` :
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `build_images_locally` | `true` | `false` en CI/VM pour pull GHCR |
+| `image_registry_prefix` | `ghcr.io/petitpingu/enervision` | Préfixe des images |
+| `image_tag` | `dev` | Tag à déployer |
+
+Exemple pull GHCR (tests PR sans merge sur `dev`) :
+
+```bash
+cd infra
+terraform apply \
+  -var="build_images_locally=false" \
+  -var="image_tag=pr-168"
+```
+
+Exemple deploy après merge sur `dev` :
+
+```bash
+terraform apply \
+  -var="build_images_locally=false" \
+  -var="image_tag=sha-<commit>"
+```
+
 ## Prochaine étape
 
-1. Variables Terraform `image_*` pointant vers `ghcr.io/petitpingu/enervision/...`
-2. Workflow deploy : `terraform apply` avec le tag `sha-<commit>`
-3. Retirer les `local-exec docker build` du chemin prod (`infra/images_build.tf`)
+1. Auth GHCR sur la VM (`docker login` via secret `GHCR_READ_TOKEN`)
+2. Workflow deploy CI : `terraform apply` avec `image_tag=sha-<commit>`
+3. Retirer le push sur PR du workflow une fois les tests terminés

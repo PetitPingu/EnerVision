@@ -1,5 +1,5 @@
 resource "docker_image" "dashboard" {
-  name         = "enervision/dashboard:latest"
+  name         = local.app_images.dashboard
   keep_locally = true
   depends_on   = [terraform_data.build_dashboard]
 }
