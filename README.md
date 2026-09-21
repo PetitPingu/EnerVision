@@ -108,6 +108,7 @@ scripts/         scripts de dev Windows (.bat)
 | [docs/seq_etl.md](docs/seq_etl.md), [seq_predict_call.md](docs/seq_predict_call.md), [seq_prediction.md](docs/seq_prediction.md) | Diagrammes de séquence des flux implémentés |
 | [docs/seq_auth_token.md](docs/seq_auth_token.md) | Design d'authentification **proposé, non implémenté** |
 | [apps/prediction/docs/](apps/prediction/docs/) | Architecture, pipeline ML et Model Registry détaillés du service Prediction |
+| [docs/load-testing.md](docs/load-testing.md) | Test de charge Locust sur `core_api` et son intégration CI |
 
 ## Tests & CI
 
@@ -125,3 +126,8 @@ python -m pytest -v
 
 Le dashboard a son lint, son build et ses tests e2e Playwright en CI
 (`.github/workflows/dashboard-*.yml`).
+
+Le test de charge Locust sur `core_api`
+([.github/workflows/load-test.yml](.github/workflows/load-test.yml)) se
+déclenche manuellement ou en nightly, jamais sur push/PR — voir
+[docs/load-testing.md](docs/load-testing.md).
