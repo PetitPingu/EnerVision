@@ -266,6 +266,7 @@ services:
       # utilisé par défaut - voir docs/model-registry.md.
       MODEL_STORE: mlflow
       MODEL_NAME: energy-consumption
+      STATE_MODEL_NAME: sensor-state-model
       MINIO_ENDPOINT: minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}

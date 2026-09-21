@@ -8,7 +8,7 @@ from sklearn.pipeline import Pipeline
 
 from application.ports import ModelStorePort, SavedModelMetadata
 from infrastructure.config import Config
-from infrastructure.ml.features import FEATURE_COLUMNS
+from infrastructure.ml.consumption.features import FEATURE_COLUMNS
 
 
 class ModelNotLoadedError(Exception):

@@ -9,8 +9,8 @@ from db_schema.models import ReadingCurated
 from sqlalchemy import create_engine, func, select
 
 from application.ports import TrainingDataPort
-from infrastructure.ml.features import RAW_COLUMNS, build_features
-from infrastructure.ml.trainer import TrainingResult, train_model
+from infrastructure.ml.consumption.features import RAW_COLUMNS, build_features
+from infrastructure.ml.consumption.trainer import TrainingResult, train_model
 
 
 class PostgresTrainingDataReader(TrainingDataPort):

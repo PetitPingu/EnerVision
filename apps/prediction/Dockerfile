@@ -12,4 +12,7 @@ COPY apps/prediction/ .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "presentation.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# main.py (pas uvicorn directement) : câble le scheduler APScheduler
+# (ré-entraînement 24h des 2 modèles) et le check de démarrage
+# ("Modèle Production chargé au démarrage") avant de servir l'API.
+CMD ["python", "main.py"]

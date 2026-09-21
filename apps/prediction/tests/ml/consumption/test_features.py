@@ -1,6 +1,6 @@
 import pandas as pd
 
-from infrastructure.ml.features import (
+from infrastructure.ml.consumption.features import (
     FEATURE_COLUMNS,
     TARGET_COLUMN,
     build_features,

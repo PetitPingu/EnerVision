@@ -1,4 +1,11 @@
-"""Composition : choisit l'implémentation concrète de ModelStorePort."""
+"""Composition : choisit l'implémentation concrète de ModelStorePort.
+
+Une seule paire d'implémentations (Minio/MlflowModelStore) sert les deux
+modèles du service (régression consommation et classification d'état) :
+ModelStorePort ne connaît que SavedModelMetadata.metrics (dict générique),
+donc rien à dupliquer côté stockage pour un second modèle - seul
+model_name (voir Config.MODEL_NAME / Config.STATE_MODEL_NAME) les distingue.
+"""
 
 from application.ports import ModelStorePort
 from infrastructure.config import Config

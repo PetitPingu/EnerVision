@@ -11,8 +11,8 @@ from dataclasses import dataclass
 
 from application.ports import ModelStorePort, SavedModelMetadata, TrainingDataPort
 from infrastructure.model_store import utc_version_timestamp
-from infrastructure.ml.features import FEATURE_COLUMNS
-from infrastructure.ml.trainer import TrainingResult, train_model
+from infrastructure.ml.consumption.features import FEATURE_COLUMNS
+from infrastructure.ml.consumption.trainer import TrainingResult, train_model
 
 
 @dataclass(frozen=True)
@@ -41,8 +41,7 @@ def retrain_if_better(
     metadata = SavedModelMetadata(
         model_name=model_name,
         trained_at=utc_version_timestamp(),
-        mae=training.mae,
-        rmse=training.rmse,
+        metrics={"mae": training.mae, "rmse": training.rmse},
         train_size=training.train_size,
         test_size=training.test_size,
         features=tuple(FEATURE_COLUMNS),

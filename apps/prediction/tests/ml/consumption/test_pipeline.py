@@ -1,7 +1,7 @@
 import pandas as pd
 
-from infrastructure.ml.features import build_features
-from infrastructure.ml.pipeline import create_model_pipeline
+from infrastructure.ml.consumption.features import build_features
+from infrastructure.ml.consumption.pipeline import create_model_pipeline
 
 
 def _sample_raw_df() -> pd.DataFrame:

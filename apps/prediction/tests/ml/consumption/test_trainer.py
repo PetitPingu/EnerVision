@@ -1,7 +1,7 @@
 import pandas as pd
 
-from infrastructure.ml.features import build_features
-from infrastructure.ml.trainer import train_model
+from infrastructure.ml.consumption.features import build_features
+from infrastructure.ml.consumption.trainer import train_model
 
 
 def _sample_raw_df() -> pd.DataFrame:

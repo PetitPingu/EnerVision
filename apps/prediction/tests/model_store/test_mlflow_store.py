@@ -26,7 +26,8 @@ def _sample_metadata(**overrides) -> SavedModelMetadata:
         "features": ("site_id", "hour", "minute"),
     }
     data.update(overrides)
-    return SavedModelMetadata(**data)
+    metrics = {"mae": data.pop("mae"), "rmse": data.pop("rmse")}
+    return SavedModelMetadata(metrics=metrics, **data)
 
 
 @pytest.fixture
