@@ -1,11 +1,12 @@
 # Registry GHCR — images applicatives
 
-Les images Docker des services EnerVision sont **construites et publiées en CI** (GitHub Actions) vers **GitHub Container Registry** (`ghcr.io`).
+Les images Docker des services EnerVision sont **construites et publiées en CI** (GitHub Actions cloud) vers **GitHub Container Registry** (`ghcr.io`). Le **déploiement Terraform** s'exécute sur la **VM via un self-hosted runner** (la VM n'est pas accessible depuis Internet).
 
-| Workflow | Rôle |
-|----------|------|
-| [images-build-push.yml](../.github/workflows/images-build-push.yml) | Build + push GHCR |
-| [deploy.yml](../.github/workflows/deploy.yml) | `terraform apply` sur la VM (pull GHCR) |
+| Workflow | Runner | Rôle |
+|----------|--------|------|
+| [images-build-push.yml](../.github/workflows/images-build-push.yml) | `ubuntu-latest` | Build + push GHCR |
+| [deploy.yml](../.github/workflows/deploy.yml) | `self-hosted` (`enervision-vm`) | `terraform apply` sur la VM |
+| [runner-check.yml](../.github/workflows/runner-check.yml) | `self-hosted` | Vérifier Docker/Terraform/réseau |
 
 ## Convention de nommage
 
@@ -20,99 +21,115 @@ Les images Docker des services EnerVision sont **construites et publiées en CI*
 
 | Tag | Usage |
 |-----|--------|
-| `sha-<commit>` | Immutable — utilisé par le deploy automatique |
+| `sha-<commit>` | Immutable — deploy auto après merge |
 | `dev` / `main` | Pointeur par branche |
 | `pr-<numéro>` | Tests PR (temporaire, push activé sur PR) |
 | `latest` | Uniquement sur `main` |
 
-## Secrets GitHub (Settings → Secrets and variables → Actions)
+## Self-hosted runner (VM)
 
-Configurer avant le premier deploy :
+La VM initie les connexions **sortantes** vers GitHub — pas besoin d'ouvrir SSH depuis Internet.
+
+### Prérequis VM
+
+- Docker installé, utilisateur runner dans le groupe `docker`
+- Terraform `>= 1.5`
+- Accès sortant vers `github.com` et `ghcr.io`
+
+### Installation
+
+1. Repo → **Settings** → **Actions** → **Runners** → **New self-hosted runner**
+2. Sur la VM (via SSH interne) :
+
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+
+# URL et version : celles affichées par GitHub
+curl -o actions-runner-linux-x64.tar.gz -L https://github.com/actions/runner/releases/download/vX.XXX.X/actions-runner-linux-x64-X.XXX.X.tar.gz
+tar xzf actions-runner-linux-x64.tar.gz
+
+./config.sh --url https://github.com/PetitPingu/EnerVision \
+  --token <TOKEN_AFFICHE_PAR_GITHUB> \
+  --name enervision-vm \
+  --labels enervision-vm,self-hosted,linux \
+  --unattended
+
+sudo ./svc.sh install
+sudo ./svc.sh start
+```
+
+3. Vérifier : runner **Idle** dans Settings → Actions → Runners
+4. Tester : Actions → **Self-hosted runner check** → Run workflow
+
+Label attendu par les workflows : **`enervision-vm`**
+
+### État Terraform persistant
+
+Le workflow sauvegarde `terraform.tfstate` dans `~/enervision-deploy/state/` sur la VM (hors répertoire de travail éphémère du runner).
+
+Variable repo optionnelle : `TF_STATE_DIR` (chemin absolu alternatif).
+
+## Secrets GitHub
 
 | Secret | Description |
 |--------|-------------|
-| `VM_HOST` | IP ou hostname de la VM |
-| `SSH_USER` | Utilisateur SSH |
-| `SSH_PRIVATE_KEY` | Clé privée SSH (PEM, accès à la VM) |
-| `SSH_PORT` | (optionnel) Port SSH, défaut `22` |
 | `GHCR_USERNAME` | Compte GitHub avec `read:packages` |
-| `GHCR_READ_TOKEN` | PAT classic avec `read:packages` |
+| `GHCR_READ_TOKEN` | PAT classic `read:packages` |
 | `DB_PASSWORD` | Mot de passe Postgres |
 | `MINIO_ROOT_PASSWORD` | Mot de passe MinIO |
 | `ENERVISION_API_USERNAME` | Identifiant API mock |
 | `ENERVISION_API_PASSWORD` | Mot de passe API mock |
 | `GRAFANA_ADMIN_PASSWORD` | Mot de passe Grafana |
-| `DEPLOY_HOST` | (optionnel) Hostname public pour les outputs Terraform (sinon `VM_HOST`) |
+| `DEPLOY_HOST` | Hostname/IP affiché dans les outputs (URL d'accès à l'app) |
 
-**Variable** (non secrète) :
+**Variable** : `DASHBOARD_API_BFF_URL` (URL `core_api` au build dashboard)
 
-| Variable | Description |
-|----------|-------------|
-| `DASHBOARD_API_BFF_URL` | URL publique de `core_api` au build dashboard |
+Les secrets `VM_HOST`, `SSH_*` ne sont **plus nécessaires** pour le deploy (runner local).
 
-### Créer le PAT `GHCR_READ_TOKEN`
+### Créer `GHCR_READ_TOKEN`
 
-1. GitHub → Settings → Developer settings → Personal access tokens (classic)
-2. Scopes : `read:packages` (+ `repo` si packages privés)
-3. Coller la valeur dans le secret `GHCR_READ_TOKEN`
-
-## Prérequis VM
-
-- Docker installé et démarré
-- Terraform `>= 1.5` installé
-- Utilisateur SSH membre du groupe `docker`
-- Port SSH accessible depuis les runners GitHub Actions
+GitHub → Settings → Developer settings → PAT (classic) → scopes `read:packages` (+ `repo` si privé).
 
 ## Déploiement
 
-### Automatique (après merge sur `dev` / `main`)
+### Automatique (merge sur `dev` / `main`)
 
-1. `Build and push images` termine avec succès
-2. `Deploy (Terraform + GHCR)` se déclenche (`workflow_run`)
-3. Tag déployé : `sha-<commit>` du push
+1. Build + push images (`sha-<commit>`)
+2. Deploy déclenché (`workflow_run`) sur le runner VM
+3. `terraform apply` avec `image_tag=sha-<commit>`
 
-### Manuel (tests PR sans merge)
+### Manuel (tests PR)
 
-Actions → **Deploy (Terraform + GHCR)** → **Run workflow** → tag `pr-168` (ou autre).
+Actions → **Deploy (Terraform + GHCR)** → Run workflow → tag `pr-168`.
 
-### Ce que fait le deploy
+### Étapes du job deploy
 
-1. `rsync` du dossier `infra/` vers `~/enervision-deploy/infra/` sur la VM
-2. `docker login ghcr.io` sur la VM
-3. `terraform apply` avec `build_images_locally=false` et le tag choisi
-4. État Terraform conservé sur la VM (`terraform.tfstate` local)
+1. Checkout du repo sur la VM
+2. Restauration de `terraform.tfstate` depuis `~/enervision-deploy/state/`
+3. `docker login ghcr.io`
+4. `terraform apply` (`build_images_locally=false`)
+5. Sauvegarde du state
 
 ## Terraform (variables)
 
-| Variable | Défaut | CI / VM |
-|----------|--------|---------|
-| `build_images_locally` | `true` | `false` |
-| `image_tag` | `dev` | `sha-<commit>` ou `pr-<n>` |
-| `ghcr_username` / `ghcr_read_token` | vide | depuis secrets |
-| `vm_host` / `ssh_user` | vide | optionnel (apply local via SSH Docker) |
-
-Apply local depuis un poste (sans workflow) :
-
-```bash
-cd infra
-terraform apply \
-  -var="build_images_locally=false" \
-  -var="image_tag=pr-168" \
-  -var="ghcr_username=VOTRE_USER" \
-  -var="ghcr_read_token=ghp_..."
-```
+| Variable | Deploy CI |
+|----------|-----------|
+| `build_images_locally` | `false` |
+| `image_tag` | `sha-<commit>` ou `pr-<n>` |
+| `docker_host` | `unix:///var/run/docker.sock` |
+| `ghcr_username` / `ghcr_read_token` | depuis secrets |
 
 ## Dépannage
 
 | Problème | Action |
 |----------|--------|
-| `permission_denied` sur push CI | `packages: write` dans le workflow build |
-| `unauthorized` sur pull VM | Vérifier `GHCR_READ_TOKEN` + `docker login` |
-| Terraform ne trouve pas l'image | Vérifier que le tag existe (build CI terminé) |
-| SSH échoue | Vérifier `SSH_PRIVATE_KEY`, firewall, `known_hosts` |
-| `terraform: command not found` sur VM | Installer Terraform sur la VM |
+| Job en attente indéfiniment | Runner offline — `sudo ./svc.sh status` sur la VM |
+| `No runner matching...` | Vérifier le label `enervision-vm` |
+| `unauthorized` pull GHCR | `GHCR_READ_TOKEN` / `docker login` |
+| Image introuvable | Tag inexistant — lancer le build CI d'abord |
+| State perdu | Vérifier `~/enervision-deploy/state/terraform.tfstate` |
 
 ## À faire plus tard
 
-- Retirer le push sur PR du workflow build (une fois les tests terminés)
-- Backend Terraform distant (optionnel, si plusieurs opérateurs)
+- Retirer le push sur PR du workflow build
+- Backend Terraform distant (optionnel)
