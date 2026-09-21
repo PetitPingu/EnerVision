@@ -8,15 +8,30 @@ from sklearn.pipeline import Pipeline
 
 @dataclass(frozen=True)
 class SavedModelMetadata:
-    """Métadonnées d'un modèle persisté (accompagnent l'artifact joblib)."""
+    """Métadonnées d'un modèle persisté (accompagnent l'artifact joblib).
+
+    `metrics` est un dict générique (ex. {"mae": .., "rmse": ..} pour un
+    modèle de régression, {"accuracy": .., "f1_macro": ..} pour un modèle
+    de classification) : ModelStorePort et ses implémentations ne
+    connaissent aucun nom de métrique en particulier, ce qui leur permet de
+    servir n'importe quel modèle (voir predict_state.py pour un second
+    modèle - classification - qui réutilise cette même abstraction).
+    """
 
     model_name: str
     trained_at: str
-    mae: float
-    rmse: float
+    metrics: dict[str, float]
     train_size: int
     test_size: int
     features: tuple[str, ...]
+
+    @property
+    def mae(self) -> float:
+        return self.metrics["mae"]
+
+    @property
+    def rmse(self) -> float:
+        return self.metrics["rmse"]
 
 
 class ModelStorePort(ABC):

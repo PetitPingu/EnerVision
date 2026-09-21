@@ -2,20 +2,20 @@ from datetime import datetime, timezone
 
 import pytest
 
-from application.predict import (
+from application.consumption.predict import (
     InvalidIntervalError,
     InvalidPredictionRangeError,
     ModelNotLoadedError,
     predict,
     predict_range,
 )
-from application.train_and_publish import train_and_publish
+from application.consumption.train_and_publish import train_and_publish
 from infrastructure.training_data import MockTrainingDataReader
 
 
 def test_predict_returns_prediction_from_latest_model(monkeypatch):
     monkeypatch.setattr(
-        "application.train_and_publish.utc_version_timestamp",
+        "application.consumption.train_and_publish.utc_version_timestamp",
         lambda: "2026-09-16T14-30-00Z",
     )
 
@@ -67,7 +67,7 @@ def test_predict_raises_when_model_unavailable():
 
 def test_predict_range_returns_minute_by_minute_predictions(monkeypatch):
     monkeypatch.setattr(
-        "application.train_and_publish.utc_version_timestamp",
+        "application.consumption.train_and_publish.utc_version_timestamp",
         lambda: "2026-09-16T14-30-00Z",
     )
 
@@ -110,7 +110,7 @@ def test_predict_range_returns_minute_by_minute_predictions(monkeypatch):
 
 def test_predict_range_returns_hourly_predictions_when_interval_is_hour(monkeypatch):
     monkeypatch.setattr(
-        "application.train_and_publish.utc_version_timestamp",
+        "application.consumption.train_and_publish.utc_version_timestamp",
         lambda: "2026-09-16T14-30-00Z",
     )
 

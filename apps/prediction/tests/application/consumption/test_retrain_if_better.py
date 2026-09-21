@@ -1,6 +1,6 @@
 import pytest
 
-from application.retrain_if_better import retrain_if_better
+from application.consumption.retrain_if_better import retrain_if_better
 from infrastructure.training_data import MockTrainingDataReader
 
 
@@ -45,7 +45,7 @@ def df():
 
 def _patch_timestamp(monkeypatch, value="2026-09-17T10-00-00Z"):
     monkeypatch.setattr(
-        "application.retrain_if_better.utc_version_timestamp",
+        "application.consumption.retrain_if_better.utc_version_timestamp",
         lambda: value,
     )
 
@@ -110,8 +110,7 @@ def _champion_metadata(mae: float):
     return SavedModelMetadata(
         model_name="energy-consumption",
         trained_at="2026-09-16T08-00-00Z",
-        mae=mae,
-        rmse=mae * 1.5,
+        metrics={"mae": mae, "rmse": mae * 1.5},
         train_size=100,
         test_size=25,
         features=("site_id", "hour", "minute"),

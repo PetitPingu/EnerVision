@@ -10,8 +10,8 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
-from infrastructure.ml.features import build_features
-from infrastructure.ml.pipeline import create_model_pipeline
+from infrastructure.ml.consumption.features import build_features
+from infrastructure.ml.consumption.pipeline import create_model_pipeline
 
 
 @dataclass(frozen=True)

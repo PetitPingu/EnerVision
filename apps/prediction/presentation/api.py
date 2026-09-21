@@ -14,12 +14,16 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 
-from application.predict import (
+from application.consumption.predict import (
     InvalidIntervalError,
     InvalidPredictionRangeError,
     ModelNotLoadedError,
     predict as run_predict,
     predict_range as run_predict_range,
+)
+from application.state.predict_state import (
+    StateModelNotLoadedError,
+    predict_state as run_predict_state,
 )
 from infrastructure.config import Config
 from infrastructure.model_store import create_model_store
@@ -36,7 +40,7 @@ def root() -> dict:
     """Point d'entrée : liste les endpoints disponibles."""
     return {
         "service": "prediction",
-        "endpoints": ["/docs", "/health", "/predict", "/predict/range"],
+        "endpoints": ["/docs", "/health", "/predict", "/predict/range", "/predict/state"],
     }
 
 
@@ -134,6 +138,41 @@ def predict_range(
             }
             for point in result.predictions
         ],
+    }
+
+
+@app.get("/predict/state", tags=["Prediction"], summary="Prédit l'état futur du capteur")
+def predict_state(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    timestamp: str = Query(
+        ...,
+        description="Horodatage cible au format ISO8601, ex: 2026-09-17T14:30:00Z",
+    ),
+) -> dict:
+    """Prédit l'état (data_quality : good/partial/degraded/critical) d'un
+    site à un instant donné."""
+    target_timestamp = _parse_iso8601(timestamp)
+    if target_timestamp is None:
+        raise HTTPException(
+            status_code=422,
+            detail="timestamp must be ISO8601",
+        )
+
+    try:
+        result = run_predict_state(
+            model_store=create_model_store(),
+            model_name=Config.STATE_MODEL_NAME,
+            site_id=site_id,
+            target_timestamp=target_timestamp,
+        )
+    except StateModelNotLoadedError:
+        raise HTTPException(status_code=503, detail="state model not loaded")
+
+    return {
+        "site_id": result.site_id,
+        "target_timestamp": _format_iso8601(result.target_timestamp),
+        "predicted_state": result.predicted_state,
+        "model_version": result.model_version,
     }
 
 

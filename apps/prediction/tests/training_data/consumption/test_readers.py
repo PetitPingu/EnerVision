@@ -1,7 +1,7 @@
 import pandas as pd
 
-from infrastructure.ml.features import RAW_COLUMNS, build_features
-from infrastructure.ml.trainer import train_model
+from infrastructure.ml.consumption.features import RAW_COLUMNS, build_features
+from infrastructure.ml.consumption.trainer import train_model
 from infrastructure.training_data import (
     MockTrainingDataReader,
     PostgresTrainingDataReader,
@@ -49,7 +49,7 @@ def test_postgres_training_data_reader_fetch(monkeypatch):
         return expected.copy()
 
     monkeypatch.setattr(
-        "infrastructure.training_data.postgres_reader.pd.read_sql",
+        "infrastructure.training_data.consumption.postgres_reader.pd.read_sql",
         fake_read_sql,
     )
 

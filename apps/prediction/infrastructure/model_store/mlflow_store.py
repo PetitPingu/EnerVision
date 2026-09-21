@@ -50,7 +50,7 @@ class MlflowModelStore(ModelStorePort):
                     "features": ",".join(metadata.features),
                 }
             )
-            mlflow.log_metrics({"mae": metadata.mae, "rmse": metadata.rmse})
+            mlflow.log_metrics(metadata.metrics)
 
             model_info = mlflow.sklearn.log_model(
                 pipeline,
@@ -93,15 +93,14 @@ def _metadata_from_run(model_name: str, run: Run) -> SavedModelMetadata:
     params, metrics = run.data.params, run.data.metrics
     features = tuple(params["features"].split(",")) if params.get("features") else ()
 
-    # mae/rmse/train_size/test_size n'ont pas de valeur par défaut sensée -
-    # un run qui ne les a pas (alias repointé à la main vers un run externe,
-    # par ex.) est une entrée de Registry corrompue : on veut un KeyError
-    # explicite ici plutôt qu'un 0.0/0 silencieux et trompeur.
+    # train_size/test_size n'ont pas de valeur par défaut sensée - un run qui
+    # ne les a pas (alias repointé à la main vers un run externe, par ex.)
+    # est une entrée de Registry corrompue : on veut un KeyError explicite
+    # ici plutôt qu'un 0 silencieux et trompeur.
     return SavedModelMetadata(
         model_name=model_name,
         trained_at=params.get("trained_at", ""),
-        mae=float(metrics["mae"]),
-        rmse=float(metrics["rmse"]),
+        metrics={key: float(value) for key, value in metrics.items()},
         train_size=int(params["train_size"]),
         test_size=int(params["test_size"]),
         features=features,

@@ -6,10 +6,12 @@ dépendance).
 """
 
 from application.ports.model_store_port import ModelStorePort, SavedModelMetadata
+from application.ports.state_training_data_port import StateTrainingDataPort
 from application.ports.training_data_port import TrainingDataPort
 
 __all__ = [
     "ModelStorePort",
     "SavedModelMetadata",
+    "StateTrainingDataPort",
     "TrainingDataPort",
 ]

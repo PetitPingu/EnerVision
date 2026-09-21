@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from application.ports import TrainingDataPort
-from infrastructure.ml.features import RAW_COLUMNS
+from infrastructure.ml.consumption.features import RAW_COLUMNS
 
 
 class JsonFileTrainingDataReader(TrainingDataPort):

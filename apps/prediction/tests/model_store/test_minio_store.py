@@ -15,8 +15,7 @@ def _sample_metadata() -> SavedModelMetadata:
     return SavedModelMetadata(
         model_name="energy-consumption",
         trained_at="2026-09-16T14-30-00Z",
-        mae=18.2,
-        rmse=27.5,
+        metrics={"mae": 18.2, "rmse": 27.5},
         train_size=100,
         test_size=25,
         features=("site_id", "hour", "minute"),
