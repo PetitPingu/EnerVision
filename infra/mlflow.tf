@@ -1,5 +1,5 @@
 resource "docker_image" "mlflow" {
-  name         = "enervision/mlflow:latest"
+  name         = local.app_images.mlflow
   keep_locally = true
   depends_on   = [terraform_data.build_mlflow]
 }

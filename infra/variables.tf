@@ -218,3 +218,52 @@ variable "grafana_admin_password" {
   sensitive   = true
   description = "Mot de passe administrateur Grafana"
 }
+
+variable "build_images_locally" {
+  type        = bool
+  default     = true
+  description = "true : build via local-exec (dev local). false : pull depuis GHCR (CI / VM)."
+}
+
+variable "image_registry_prefix" {
+  type        = string
+  default     = "ghcr.io/petitpingu/enervision"
+  description = "Préfixe GHCR des images applicatives (sans tag)"
+}
+
+variable "image_tag" {
+  type        = string
+  default     = "dev"
+  description = "Tag des images GHCR (ex. dev, main, sha-<commit>, pr-<numéro>)"
+}
+
+variable "vm_host" {
+  type        = string
+  default     = ""
+  description = "Hôte de la VM (non vide → docker_host via SSH pour piloter Docker à distance)"
+}
+
+variable "ssh_user" {
+  type        = string
+  default     = ""
+  description = "Utilisateur SSH sur la VM de déploiement"
+}
+
+variable "ssh_port" {
+  type        = number
+  default     = 22
+  description = "Port SSH de la VM de déploiement"
+}
+
+variable "ghcr_username" {
+  type        = string
+  default     = ""
+  description = "Utilisateur GitHub pour docker pull GHCR (ex. compte avec read:packages)"
+}
+
+variable "ghcr_read_token" {
+  type        = string
+  default     = ""
+  sensitive   = true
+  description = "PAT read:packages pour pull GHCR (CI / VM)"
+}

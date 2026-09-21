@@ -1,0 +1,19 @@
+name: Self-hosted runner check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Verify VM runner
+    runs-on: [self-hosted, enervision-vm]
+
+    steps:
+      - name: Runner environment
+        run: |
+          echo "hostname=$(hostname)"
+          echo "user=$(whoami)"
+          echo "docker=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo MISSING)"
+          echo "terraform=$(terraform version -json 2>/dev/null | head -c 80 || terraform version 2>/dev/null || echo MISSING)"
+          curl -fsSI https://github.com >/dev/null && echo "github=OK" || echo "github=FAIL"
+          curl -fsSI https://ghcr.io >/dev/null && echo "ghcr=OK" || echo "ghcr=FAIL"
