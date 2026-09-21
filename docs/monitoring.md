@@ -74,7 +74,7 @@ projet mais à ne jamais garder en prod.
 | Section | Indicateurs | Pourquoi |
 |---|---|---|
 | PostgreSQL / TimescaleDB | up, connexions actives, cache hit ratio, commit/rollback par seconde, lignes lues/écrites | Détecter une saturation de connexions, un cache inefficace (I/O disque en hausse) ou un taux de rollback anormal signalant des requêtes en échec |
-| Redis | up, clients connectés, mémoire utilisée, commandes/s, hit/miss ratio | Redis porte le stream `alert.detected` (lecture critical de l'ETL) : une dérive mémoire ou un up=0 casse la détection d'alerte en temps réel |
+| Redis | up, clients connectés, mémoire utilisée, commandes/s, hit/miss ratio | Redis porte le stream `alert.detected` (transitions data_quality de l'ETL, lu par `core_api` en SSE) : une dérive mémoire ou un up=0 casse la détection d'alerte en temps réel |
 | MinIO | noeuds en ligne, usage vs capacité, espace libre, requêtes S3/s | Le bucket raw reçoit en continu les lectures de l'ETL ; surveiller l'espace évite une panne d'écriture silencieuse |
 | Traefik | requêtes/s par entrypoint et code HTTP, connexions ouvertes, latence p95 par service, taux d'erreurs 5xx | Vue de bout en bout du trafic entrant vers `core_api` : latence et taux d'erreur sont les deux signaux qui remontent le plus vite un incident |
 

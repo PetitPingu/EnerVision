@@ -1,9 +1,11 @@
 from dataclasses import asdict
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
-from domain.entities import Alert, Reading, Site
+import pytest
+from domain.entities import Alert, AlertEvent, Reading, Site
 from fastapi.testclient import TestClient
 from presentation import api
+from presentation.api import _sse_alert_events
 
 SITES = [Site(site_id="SITE001", site_name="Bureau Paris")]
 READINGS = [Reading(site_id="SITE001", timestamp="2024-06-15T14:32:00.123456", data_quality="good")]
@@ -125,6 +127,51 @@ def test_alerts_relays_api_mock_client(monkeypatch):
     mock_api.get_alerts.assert_called_once_with(site_id="SITE001", severity="high")
 
 
+def test_active_alerts_relays_active_alerts_reader(monkeypatch):
+    event = AlertEvent(
+        event_id="snapshot:SITE002:2026-09-18T08:20:17",
+        site_id="SITE002",
+        timestamp="2026-09-18T08:20:17",
+        data_quality="critical",
+        null_reasons=["network_loss"],
+    )
+    mock_reader = Mock()
+    mock_reader.get_active.return_value = [event]
+    monkeypatch.setattr(api, "active_alerts_reader", mock_reader)
+
+    response = TestClient(api.app).get("/api/v1/alerts/active")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "event_id": "snapshot:SITE002:2026-09-18T08:20:17",
+            "site_id": "SITE002",
+            "timestamp": "2026-09-18T08:20:17",
+            "data_quality": "critical",
+            "null_reasons": ["network_loss"],
+            "kind": "alert",
+        }
+    ]
+    mock_reader.get_active.assert_called_once()
+
+
+def test_active_alerts_serializes_partial_as_minor_alert_kind(monkeypatch):
+    event = AlertEvent(
+        event_id="snapshot:SITE005:2026-09-18T08:59:17",
+        site_id="SITE005",
+        timestamp="2026-09-18T08:59:17",
+        data_quality="partial",
+        null_reasons=["temperature_sensor_failure"],
+    )
+    mock_reader = Mock()
+    mock_reader.get_active.return_value = [event]
+    monkeypatch.setattr(api, "active_alerts_reader", mock_reader)
+
+    response = TestClient(api.app).get("/api/v1/alerts/active")
+
+    assert response.json()[0]["kind"] == "minor_alert"
+
+
 def test_sensors_status_relays_api_mock_client(monkeypatch):
     client, mock_api, _ = _client(monkeypatch)
 
@@ -161,3 +208,38 @@ def test_recommendations_requires_site_id(monkeypatch):
     response = client.get("/api/v1/recommendations")
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_sse_alert_events_yields_formatted_events_then_stops():
+    event = AlertEvent(
+        event_id="1-0", site_id="SITE001", timestamp="2026-09-15T10:00:00", data_quality="critical"
+    )
+    stream = AsyncMock()
+    stream.read_new.side_effect = [[event], []]
+    request = Mock()
+    request.is_disconnected = AsyncMock(side_effect=[False, False, True])
+
+    generator = _sse_alert_events(request, stream)
+
+    first = await anext(generator)
+    assert first.startswith("event: alert\ndata: ")
+    assert '"site_id": "SITE001"' in first
+
+    second = await anext(generator)
+    assert second == ": heartbeat\n\n"
+
+    with pytest.raises(StopAsyncIteration):
+        await anext(generator)
+
+
+def test_alerts_stream_route_returns_sse_content_type(monkeypatch):
+    mock_stream = AsyncMock()
+    monkeypatch.setattr(api, "alert_stream", mock_stream)
+    monkeypatch.setattr(api.Request, "is_disconnected", AsyncMock(return_value=True))
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/v1/alerts/stream")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
