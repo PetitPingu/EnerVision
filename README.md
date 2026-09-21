@@ -14,3 +14,8 @@ est décrit dans [docs/ingestion-worker.md](docs/ingestion-worker.md).
 
 Le monitoring infra (Prometheus + Grafana) est décrit dans
 [docs/monitoring.md](docs/monitoring.md).
+
+## Test de charge
+
+Le scénario Locust sur `core_api` et son intégration CI sont décrits dans
+[docs/load-testing.md](docs/load-testing.md).
