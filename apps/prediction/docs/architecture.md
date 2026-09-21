@@ -38,16 +38,22 @@ apps/prediction/
 
 ### Presentation
 
-Traduit le HTTP en appels applicatifs. Pour l'instant : `GET /health` et
-`GET /`. Aucune logique métier.
+Traduit le HTTP en appels applicatifs : `GET /`, `GET /health`, ainsi que
+`GET /predict` et `GET /predict/range` (inférence). Aucune logique métier.
 
 ### Application
 
 - **Ports** : contrats que l'infrastructure doit respecter.
 - **Use cases** : orchestrent les ports sans connaître les détails techniques.
 
-Use case actuel : `train_and_publish()` — charge les données, entraîne le
-pipeline sklearn, enregistre l'artifact dans MinIO.
+Deux use cases d'entraînement coexistent :
+- `retrain_if_better()` — celui réellement câblé au cron APScheduler
+  (`main.py`) : entraîne un candidat, le compare au champion actuel
+  (MAE) et ne le promeut (réassigne l'alias MLflow) que s'il est meilleur.
+- `train_and_publish()` — plus ancien, publie toujours le modèle entraîné
+  sans comparaison ; conservé pour les scripts manuels
+  (`tests/manual/manual_train_and_publish.py`) et testé isolément, mais
+  plus utilisé par le service en production.
 
 ### Infrastructure
 
@@ -85,8 +91,11 @@ l'implémentation.
 ### ModelStorePort
 
 ```python
-def save(pipeline, metadata) -> str          # préfixe de clé objet
-def load_latest(model_name) -> (pipeline, metadata)
+def save(pipeline, metadata) -> str                      # enregistre + promeut directement (train_and_publish)
+def load_latest(model_name) -> (pipeline, metadata)       # modèle actuellement servi
+def register(pipeline, metadata) -> str                   # enregistre sans promouvoir (champion/challenger)
+def promote(model_name, version) -> None                  # fait de {version} le modèle servi
+def get_current_metadata(model_name) -> metadata | None   # métadonnées du champion actuel
 ```
 
 | Implémentation | Fichier | Usage |
@@ -143,29 +152,29 @@ flowchart LR
     MSP --> MinIO
 ```
 
-## Flux cible (phase 2)
+## Flux actuel (phase 2, implémentée)
 
-Voir [docs/seq_prediction.md](../../../docs/seq_prediction.md) pour la
-vision complète avec MLflow, cron 24h et endpoint `/predict`.
+Voir [docs/seq_prediction.md](../../../docs/seq_prediction.md) pour le
+diagramme de séquence complet (cron de réentraînement + MLflow) et
+[docs/seq_predict_call.md](../../../docs/seq_predict_call.md) pour l'appel
+`/predict`.
 
 ```mermaid
 sequenceDiagram
-    participant Cron as APScheduler
+    participant Cron as APScheduler (RETRAIN_INTERVAL_HOURS)
     participant API as FastAPI
-    participant UC as train_and_publish
-    participant PG as Postgres
-    participant S3 as MinIO
-    participant Mem as current_model
+    participant UC as retrain_if_better
+    participant PG as Postgres (readings_curated)
+    participant MLflow as MLflow (Tracking + Registry)
 
-    Note over Cron,Mem: Phase 1 (actuel)
-    Cron->>UC: script manuel / cron futur
+    Cron->>UC: toutes les RETRAIN_INTERVAL_HOURS heures (24h par défaut)
     UC->>PG: fetch_training_data()
-    UC->>S3: save(pipeline)
+    UC->>MLflow: register() (nouvelle version) + promote() si meilleur
 
-    Note over API,Mem: Phase 2 (à venir)
-    API->>S3: load_latest() au démarrage
-    S3-->>Mem: pipeline en RAM
-    API->>Mem: predict(site_id, hour, minute)
+    Note over API,MLflow: A chaque appel /predict ou /predict/range
+    API->>MLflow: load_latest() (alias "current")
+    MLflow-->>API: pipeline + métadonnées (pas de cache en RAM)
+    API->>API: predict(site_id, hour, minute)
 ```
 
 ## Écart avec la doc infra globale
@@ -174,11 +183,11 @@ sequenceDiagram
 |---|---|---|
 | Source données | `readings_curated` | OK |
 | Persistance modèle | MLflow → MinIO | `MlflowModelStore` actif par défaut (`MODEL_STORE=mlflow` dans docker-compose.yml) ; `MinioModelStore` reste disponible — voir [model-registry.md](model-registry.md) |
-| Réentraînement | Cron 24h interne | Script manuel |
-| Inférence | `/predict` + modèle en RAM | `/predict` et `/predict/range` implémentés, rechargent le modèle à chaque appel (pas de cache en RAM) |
+| Réentraînement | Cron interne | OK — `BackgroundScheduler` (APScheduler) dans `main.py`, `RETRAIN_INTERVAL_HOURS` (24h par défaut), pattern champion/challenger (`retrain_if_better.py`) |
+| Inférence | `/predict` + modèle en RAM | `/predict` et `/predict/range` implémentés ; rechargent le modèle depuis MLflow à chaque appel (choix assumé, pas un écart à combler — voir `main.py` : rend une promotion visible immédiatement, sans redémarrage) |
 
-Écart restant avec la doc cible : pas de cron de réentraînement automatique,
-pas de cache du modèle en mémoire entre les appels.
+Écart restant avec la doc cible : aucun cache mémoire entre les appels —
+c'est un choix délibéré (voir ci-dessus), pas un TODO.
 
 ## Dépendances partagées
 
