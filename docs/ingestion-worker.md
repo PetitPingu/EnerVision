@@ -16,13 +16,52 @@ pas de cron externe), toutes les 60 secondes.
      table prête à consommer comme features pour l'entraînement d'un
      modèle.
 
-La publication d'alertes (Redis Streams) reste hors périmètre.
+Avant tout ça, dans le même passage, le worker détecte aussi une
+**transition** de `data_quality` pour le site et publie un événement sur
+Redis Streams si besoin — voir [Alertes data_quality](#alertes-data_quality-redis-streams)
+ci-dessous.
 
 Une lecture `critical` (tous les capteurs en panne, tout est `null`) suit
 exactement le même chemin en écriture brute — rien n'est filtré ni
 corrigé côté MinIO. Seul `consumption_kwh` est éventuellement comblé
 côté `readings_curated`, tous les autres champs y gardent leur valeur
 brute telle quelle, `None` inclus.
+
+## Alertes data_quality (Redis Streams)
+
+`domain/data_quality_transition.py` (`DataQualityTransitionDetector`) garde
+en mémoire, par site, le dernier `data_quality` connu (`good` | `partial` |
+`degraded` | `critical`) et détecte les changements de **zone** à publier —
+anti-flood : un site qui reste dans la même zone sur plusieurs cycles
+consécutifs ne republie rien.
+
+Trois zones, par sévérité croissante : `good` (aucune), `partial` (mineure —
+un souci isolé identifié mais réel), `degraded`/`critical` (alerte).
+
+| Transition | Événement publié |
+|---|---|
+| Site jamais vu depuis le démarrage du worker | aucun (pas de base de comparaison, même logique que `"no_history"`) |
+| `good`/`partial` → `degraded`/`critical` | alerte |
+| `good`/`degraded`/`critical` → `partial` | alerte mineure (remplace une alerte en cours le cas échéant) |
+| `partial`/`degraded`/`critical` → `good` | retour à la normale |
+| `degraded` ↔ `critical` | aucun (anti-flood, même zone) |
+| `partial` → `partial` (cycles consécutifs) | aucun (anti-flood, même zone) |
+
+`infrastructure/alert_publisher.py` (`AlertPublisher`) publie sur le stream
+Redis `alert.detected` (`XADD ... MAXLEN ~ 500` — le stream sert de tampon
+temps réel pour un dashboard qui se (re)connecte, pas d'historique durable).
+Champs envoyés : `site_id`, `timestamp`, `data_quality` (strings bruts) et
+`null_reasons` (JSON-encodé, seul champ non scalaire). Une panne Redis est
+loggée (`alert_publish_error`) et n'interrompt jamais le cycle — surtout,
+`DataQualityTransitionDetector.commit()` n'est appelé qu'après une
+publication réussie (`detect_transition()` seul ne modifie plus l'état) :
+la transition n'est donc jamais considérée "vue" tant qu'elle n'a pas été
+publiée, et sera retentée au(x) cycle(s) suivant(s) jusqu'à ce que Redis
+soit de nouveau disponible.
+
+`REDIS_HOST`/`REDIS_PORT` dans `infrastructure/config.py` (mêmes défauts que
+MinIO : `localhost` en dev hors docker-compose, `redis`/service compose en
+conteneur).
 
 ## Stratégie d'imputation
 
@@ -46,10 +85,10 @@ distingue trois cas pour chaque lecture :
 
 ## Démarrer l'infra nécessaire
 
-MinIO (source) et Postgres (destination) :
+MinIO (source), Postgres (destination) et Redis (alertes data_quality) :
 
 ```bash
-docker compose up -d minio minio-init postgres
+docker compose up -d minio minio-init postgres redis
 ```
 
 Appliquer les migrations (une fois, ou après un `git pull` qui en ajoute) :
@@ -84,7 +123,10 @@ Une ligne de log JSON par lecture traitée, puis un résumé par cycle :
 lecture (le worker continue, il ne plante jamais sur une panne
 ponctuelle — cette lecture est alors exclue de l'upsert Postgres),
 `"error"` si l'API mock elle-même était injoignable, ou
-`"curated_write_error"` si Postgres l'était.
+`"curated_write_error"` si Postgres l'était. Une transition data_quality
+ajoute une ligne de log séparée juste avant celle de l'écriture raw :
+`"alert_published"` (avec `event`: `"alert"` ou `"recovery"`), ou
+`"alert_publish_error"` si Redis était indisponible.
 
 ## Lancer les tests unitaires
 
@@ -93,8 +135,9 @@ cd apps/etl_worker
 python -m pytest -v --cov=domain --cov-report=term-missing
 ```
 
-`domain/imputation.py` est testé en isolation (valeur connue, trou
-comblé, absence d'historique, sites indépendants).
+`domain/imputation.py` et `domain/data_quality_transition.py` sont testés en
+isolation (valeur connue, trou comblé, absence d'historique, transitions,
+sites indépendants).
 
 > Si `pytest` (sans `python -m`) dit "commande introuvable", c'est que le
 > dossier `Scripts`/`bin` de ton interpréteur n'est pas sur le PATH —
@@ -108,6 +151,7 @@ comblé, absence d'historique, sites indépendants).
 | Une lecture `critical` est écrite, pas ignorée | Parcourir les objets récents d'un site dans la console MinIO (aléatoire côté API mock, peut prendre plusieurs minutes à apparaître) |
 | Une ligne par lecture dans `readings_curated` | `psql` ou tout client Postgres : `SELECT * FROM enervision.readings_curated ORDER BY timestamp DESC LIMIT 10;` |
 | `consumption_kwh` comblé signalé | `imputation_methods = 'forward_fill'` sur la ligne concernée |
+| Une transition data_quality publie un événement, une seule fois même sur plusieurs cycles `critical` d'affilée | `redis-cli XRANGE alert.detected - +` |
 
 ## Dépannage rapide
 

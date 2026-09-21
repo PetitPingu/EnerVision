@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 from application.etl_job import EtlJob
+from domain.data_quality_transition import DataQualityTransitionDetector
 from domain.imputation import ConsumptionKwhImputer
 from mockapi_client import EnergyReading, MockApiTimeoutError
 
@@ -42,7 +43,9 @@ def _critical_reading(**overrides) -> EnergyReading:
 
 
 def _job(**overrides):
-    defaults = dict(api_client=Mock(), raw_writer=Mock(), curated_writer=Mock())
+    defaults = dict(
+        api_client=Mock(), raw_writer=Mock(), curated_writer=Mock(), alert_publisher=Mock()
+    )
     defaults.update(overrides)
     job = EtlJob(**defaults)
     job.raw_writer.write.return_value = "SITE001/2026/09/15/17/30.json"
@@ -185,3 +188,197 @@ def test_known_consumption_kwh_has_no_imputation_method():
     args, _ = curated_writer.upsert_many.call_args
     curated_row = args[0][0]
     assert curated_row["imputation_methods"] is None
+
+
+def test_transition_to_critical_publishes_alert_event():
+    api_client = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+    alert_publisher.publish.assert_not_called()
+
+    api_client.get_readings.return_value = [_critical_reading()]
+    job.run()
+
+    alert_publisher.publish.assert_called_once_with(
+        site_id="SITE001",
+        timestamp="2026-09-15T10:00:13.879434",
+        data_quality="critical",
+        null_reasons=["network_outage"],
+    )
+
+
+def test_transition_to_degraded_publishes_alert_event():
+    api_client = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+
+    api_client.get_readings.return_value = [_reading(data_quality="degraded")]
+    job.run()
+
+    alert_publisher.publish.assert_called_once()
+    assert alert_publisher.publish.call_args.kwargs["data_quality"] == "degraded"
+
+
+def test_transition_from_critical_to_good_publishes_recovery_event():
+    api_client = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+    api_client.get_readings.return_value = [_critical_reading()]
+    job.run()
+    alert_publisher.reset_mock()
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+
+    alert_publisher.publish.assert_called_once()
+    assert alert_publisher.publish.call_args.kwargs["data_quality"] == "good"
+
+
+def test_repeated_critical_readings_publish_alert_only_once():
+    api_client = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+
+    api_client.get_readings.return_value = [_critical_reading()]
+    job.run()
+    job.run()
+    job.run()
+
+    alert_publisher.publish.assert_called_once()
+
+
+def test_transition_to_partial_publishes_minor_alert_event():
+    api_client = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+
+    api_client.get_readings.return_value = [_reading(data_quality="partial")]
+    job.run()
+
+    alert_publisher.publish.assert_called_once()
+    assert alert_publisher.publish.call_args.kwargs["data_quality"] == "partial"
+
+
+def test_repeated_partial_readings_publish_minor_alert_only_once():
+    api_client = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    job.run()
+
+    api_client.get_readings.return_value = [_reading(data_quality="partial")]
+    job.run()
+    job.run()
+    job.run()
+
+    alert_publisher.publish.assert_called_once()
+
+
+def test_redis_publish_failure_does_not_crash_cycle():
+    api_client = Mock()
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    curated_writer = Mock()
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        curated_writer=curated_writer,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+    job.run()
+
+    alert_publisher.publish.side_effect = RuntimeError("redis down")
+    api_client.get_readings.return_value = [_critical_reading()]
+    job.run()  # ne doit pas lever
+
+    curated_writer.upsert_many.assert_called()
+
+
+def test_failed_publish_is_retried_on_the_next_cycle_once_redis_is_back():
+    api_client = Mock()
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+    job.run()
+
+    alert_publisher.publish.side_effect = RuntimeError("redis down")
+    api_client.get_readings.return_value = [_critical_reading()]
+    job.run()  # publication échoue : la transition n'est pas commitée
+    alert_publisher.publish.assert_called_once()
+
+    alert_publisher.publish.side_effect = None  # Redis est de retour
+    job.run()  # même lecture critical : doit retenter la même transition
+
+    assert alert_publisher.publish.call_count == 2
+    assert alert_publisher.publish.call_args.kwargs["data_quality"] == "critical"
+
+
+def test_alert_publish_happens_even_when_raw_write_fails():
+    api_client = Mock()
+    api_client.get_readings.return_value = [_reading(data_quality="good")]
+    alert_publisher = Mock()
+    transition_detector = DataQualityTransitionDetector()
+    job = _job(
+        api_client=api_client,
+        alert_publisher=alert_publisher,
+        transition_detector=transition_detector,
+    )
+    job.run()
+
+    job.raw_writer.write.side_effect = RuntimeError("minio down")
+    api_client.get_readings.return_value = [_critical_reading()]
+    job.run()
+
+    alert_publisher.publish.assert_called_once()
