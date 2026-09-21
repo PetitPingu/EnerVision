@@ -3,10 +3,9 @@
 Second modèle du service Prediction : prédit, pour un site à un instant
 donné, si chacun de ses **6 capteurs** sera `on` ou `off` — une
 **classification multi-sorties** (une sortie on/off par capteur),
-contrairement au modèle de consommation qui fait de la **régression**. L'état
-global du site (`good` / `partial` / `degraded` / `critical`) n'est pas
-appris : il se déduit du nombre de capteurs prédits `off` (voir
-[Règle capteurs → état](#règle-capteurs--état-global)). Voir aussi [ml-pipeline.md](ml-pipeline.md) (modèle
+contrairement au modèle de consommation qui fait de la **régression**. Chaque
+capteur est prédit individuellement : il n'y a pas d'état global du site.
+Voir aussi [ml-pipeline.md](ml-pipeline.md) (modèle
 consommation) et [architecture.md](architecture.md) (arborescence complète).
 
 ## Ce que le modèle apprend
@@ -25,25 +24,6 @@ Chaque ligne de `readings_curated` porte 6 mesures (`consumption_kw`,
 Le modèle apprend des habitudes du type « ce site perd souvent l'humidité
 vers 11 h ». Il ne voit ni la météo ni l'état des capteurs juste avant : il
 prédit à partir du site et de l'heure uniquement.
-
-## Règle capteurs → état global
-
-L'état global n'est **pas** un second modèle : c'est une règle appliquée par
-`derive_state()` dans `application/state/predict_state.py`, sur le nombre de
-capteurs prédits `off`.
-
-| Capteurs prédits off | État global |
-|---|---|
-| 0 | `good` |
-| 1 à 2 | `partial` |
-| 3 | `degraded` |
-| 4 ou plus | `critical` |
-
-Les seuils sont les constantes `PARTIAL_MIN_OFF`, `DEGRADED_MIN_OFF` et
-`CRITICAL_MIN_OFF` : on les ajuste sans ré-entraîner. Ils ne reproduisent pas
-exactement la règle du fournisseur des données (dans la base, `critical`
-correspond à 6 capteurs off, `degraded` à 2, 4 ou 5) ; c'est un choix métier
-assumé, à réévaluer avec plus d'historique.
 
 ## Pourquoi un second modèle plutôt qu'étendre le premier ?
 
@@ -180,8 +160,7 @@ sequenceDiagram
     alt Modèle disponible
         MLflow-->>Pred: pipeline + metadata (accuracy, f1_macro, trained_at)
         Pred->>Pred: predict(site_id, hour, minute) → 6 états on/off
-        Pred->>Pred: derive_state(nombre de capteurs off)
-        Pred-->>Core: 200 OK {predicted_state, model_version}
+        Pred-->>Core: 200 OK {sensors: {capteur: on|off}, model_version}
         Core-->>Client: 200 OK
     else Aucun modèle promu
         Pred-->>Core: 503 state model not loaded
@@ -207,5 +186,6 @@ MLflow (`mlflow.log_metrics(metadata.metrics)`).
 - **Pannes rares** (environ 7 % des mesures par capteur) : un modèle qui
   répondrait toujours `on` aurait une bonne accuracy, d'où le suivi du F1
   macro. La promotion se fait pour l'instant sur l'accuracy.
-- **Compatibilité** : `predict_state()` accepte encore un ancien modèle qui
-  prédisait directement l'état global ; dans ce cas `sensors` est vide.
+- **Ancien modèle** : un modèle enregistré avant ce changement prédisait un
+  état global. `predict_state()` le refuse (503) tant qu'un ré-entraînement
+  n'a pas promu un modèle par capteur.

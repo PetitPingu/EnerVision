@@ -8,7 +8,7 @@ implémentées dans `infrastructure/`.
 ## Arborescence
 
 Deux modèles cohabitent dans le service : **consumption** (régression,
-`energy-consumption`) et **state** (classification on/off de chaque capteur, état global déduit,
+`energy-consumption`) et **state** (classification on/off de chaque capteur,
 `sensor-state-model` — voir [state-model.md](state-model.md)). Chaque
 couche qui contient de la logique spécifique à un modèle est scindée en
 sous-package `consumption/` / `state/` ; ce qui est générique (ports,
