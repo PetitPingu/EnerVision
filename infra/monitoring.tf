@@ -104,6 +104,7 @@ resource "docker_container" "prometheus" {
     docker_container.postgres_exporter,
     docker_container.redis_exporter,
     docker_container.minio_metrics_token,
+    docker_container.etl_worker,
   ]
 
   networks_advanced {

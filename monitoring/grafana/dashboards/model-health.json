@@ -1,0 +1,157 @@
+{
+  "uid": "enervision-model-health",
+  "title": "EnerVision - Santé du modèle",
+  "tags": ["enervision", "ml"],
+  "timezone": "browser",
+  "schemaVersion": 40,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 10,
+      "title": "Vue d'ensemble par site",
+      "description": "Triage rapide : un site à traiter en priorité se repère ici (drift rouge/orange, MAE anormalement haute) avant d'aller creuser dans les panels détaillés ci-dessous.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ml_prediction_mae_24h", "legendFormat": "__auto", "instant": true, "format": "table", "refId": "A" },
+        { "expr": "ml_prediction_mae_7d", "legendFormat": "__auto", "instant": true, "format": "table", "refId": "B" },
+        { "expr": "ml_feature_drift_score", "legendFormat": "__auto", "instant": true, "format": "table", "refId": "C" }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": { "byField": "site", "mode": "outer" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true
+            },
+            "includeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "site": "Site",
+              "Value #A": "MAE 24h (kWh)",
+              "Value #B": "MAE 7j (kWh)",
+              "Value #C": "Drift"
+            }
+          }
+        }
+      ],
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": { "show": false, "reducer": ["sum"], "countRows": false, "fields": "" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "center", "cellOptions": { "type": "auto" }, "inspect": false },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }, { "color": "red", "value": 80 }] }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Drift" },
+            "properties": [
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green" },
+                    { "color": "orange", "value": 1 },
+                    { "color": "red", "value": 2 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "MAE 24h (kWh)" },
+            "properties": [{ "id": "unit", "value": "kwatth" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "MAE 7j (kWh)" },
+            "properties": [{ "id": "unit", "value": "kwatth" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "title": "MAE glissante 24h par site",
+      "description": "Erreur absolue moyenne entre valeur prédite et mesure réelle (docs/monitoring_model.md).",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ml_prediction_mae_24h", "legendFormat": "{{site}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "kwatth" }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "title": "MAE glissante 7 jours par site",
+      "description": "Même métrique que ci-dessus, sur une fenêtre plus large (ml_prediction_mae_7d) : utile pour distinguer un pic ponctuel (visible sur 24h, absorbé sur 7j) d'une dégradation installée (visible sur les deux).",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ml_prediction_mae_7d", "legendFormat": "{{site}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "kwatth" }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "title": "Score de drift par site",
+      "description": "Écart normalisé de la distribution de consumption_kwh (24h) vs la fenêtre d'entraînement du modèle actif. Seuil documenté : 2 (docs/monitoring_model.md).",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ml_feature_drift_score", "legendFormat": "{{site}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Version du modèle active par site",
+      "description": "Permet de corréler une variation de MAE ou de drift avec un changement de version de modèle.",
+      "type": "state-timeline",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ml_model_version", "legendFormat": "{{site}} - {{version}}" }
+      ]
+    }
+  ]
+}

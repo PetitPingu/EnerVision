@@ -88,15 +88,35 @@ class ReadingCurated(Base):
     curated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
+class PredictionLog(Base):
+    """Une ligne par appel à /predict (apps/prediction), écrite au moment
+    de l'inférence (voir docs/monitoring_model.md).
+
+    Sert de base au job de rapprochement de l'ETL worker : jointe plus
+    tard à `ReadingCurated` sur (site_id, timestamp = target_timestamp)
+    quand la mesure réelle arrive, pour calculer l'erreur a posteriori
+    (MAE glissante 24h) et exposer `model_version` en Prometheus. Pas de
+    FK vers `Site` (même convention que `ReadingCurated`).
+    """
+
+    __tablename__ = "predictions_log"
+    __table_args__ = {"schema": "enervision"}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    site_id: Mapped[str] = mapped_column(String)
+    target_timestamp: Mapped[datetime]
+    predicted_consumption_kwh: Mapped[float]
+    model_version: Mapped[str | None]
+    generated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
 class Recommendation(Base):
     """Conseil généré par le service Recommandation pour un site
     (voir docs/seq_predict_call.md, "Appel au Service Recommandation").
 
-    Pas de clé étrangère vers une table `predictions` : elle n'existe pas
-    encore (voir docs/archi_database.md, PREDICTIONS reste "proposé").
-    prediction_id reste nullable pour ne pas bloquer sur cette dépendance —
-    une recommandation peut de toute façon naître d'un état courant
-    critique, sans prédiction.
+    Pas de clé étrangère vers `PredictionLog` : prediction_id reste
+    nullable pour ne pas bloquer sur cette dépendance — une recommandation
+    peut de toute façon naître d'un état courant critique, sans prédiction.
     """
 
     __tablename__ = "recommendations"

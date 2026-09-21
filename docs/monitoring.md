@@ -4,9 +4,12 @@
 
 Disposer d'indicateurs de performance sur le socle d'infrastructure
 (TimescaleDB, Redis, MinIO, Traefik) pour détecter une dérive ou une panne
-avant qu'elle n'impacte l'ETL ou l'API. C'est un monitoring **infra**, pas
-applicatif : il ne couvre pas encore les métriques métier de `core_api` ou
-`etl_worker`.
+avant qu'elle n'impacte l'ETL ou l'API. C'est un monitoring **infra**.
+
+Le monitoring **applicatif du modèle ML** (MAE glissante, drift) est
+couvert séparément dans [monitoring_model.md](monitoring_model.md) et
+exposé par `etl_worker` (job `ModelHealthJob`) plutôt que par un exporter
+tiers.
 
 ## Architecture
 
@@ -80,12 +83,19 @@ projet mais à ne jamais garder en prod.
 
 ## Étendre le monitoring
 
-Pour ajouter des métriques applicatives (`core_api`, `etl_worker`) plus tard :
+`etl_worker` expose désormais ses métriques applicatives (voir
+[monitoring_model.md](monitoring_model.md)) sur `/metrics` (`ETL_METRICS_PORT`,
+défaut `9200`), scrapées par le job `etl_worker` dans
+`monitoring/prometheus/prometheus.yml` et visualisées dans le dashboard
+dédié `monitoring/grafana/dashboards/model-health.json`.
+
+Pour ajouter des métriques applicatives sur un autre service (`core_api`
+par exemple) plus tard :
 
 1. Instrumenter le service (ex. `prometheus-fastapi-instrumentator` pour
-   FastAPI, ou un `prometheus_client` custom pour l'ETL).
+   FastAPI, ou un `prometheus_client` custom comme `etl_worker`).
 2. Ajouter une cible `scrape_configs` dans
    `monitoring/prometheus/prometheus.yml`.
-3. Ajouter une nouvelle rangée (`type: row`) et ses panels dans
-   `monitoring/grafana/dashboards/overview.json` — rechargé automatiquement
-   au prochain redémarrage de Grafana (pas de manipulation UI requise).
+3. Ajouter un nouveau dashboard ou une nouvelle rangée (`type: row`) dans
+   `monitoring/grafana/dashboards/` — rechargé automatiquement au prochain
+   redémarrage de Grafana (pas de manipulation UI requise).

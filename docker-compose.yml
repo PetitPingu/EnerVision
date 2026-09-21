@@ -142,6 +142,8 @@ services:
         condition: service_started
       minio-metrics-token:
         condition: service_completed_successfully
+      etl_worker:
+        condition: service_started
     networks:
       - enervision-net
     labels:
@@ -238,6 +240,10 @@ services:
       ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: ${REDIS_PORT:-6379}
+      # Badge de drift (docs/monitoring_model.md, section 6) : core_api lit
+      # ml_feature_drift_score directement depuis l'API HTTP de Prometheus.
+      PROMETHEUS_URL: http://prometheus:9090
+      CORS_ORIGINS: ${CORS_ORIGINS}
     depends_on:
       postgres:
         condition: service_healthy
@@ -247,6 +253,8 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+      prometheus:
+        condition: service_started
     networks:
       - enervision-net
     labels:

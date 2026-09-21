@@ -152,6 +152,7 @@ resource "docker_container" "core_api" {
     "ENERVISION_API_PORT=${var.enervision_api_port}",
     "ENERVISION_API_USERNAME=${var.enervision_api_username}",
     "ENERVISION_API_PASSWORD=${var.enervision_api_password}",
+    "PROMETHEUS_URL=http://prometheus:9090",
   ]
 
   ports {
