@@ -249,6 +249,11 @@ def test_alerts_stream_route_returns_sse_content_type(monkeypatch):
     mock_stream = AsyncMock()
     monkeypatch.setattr(api, "alert_stream", mock_stream)
     monkeypatch.setattr(api.Request, "is_disconnected", AsyncMock(return_value=True))
+    # Le lifespan préchauffe le cache de sites au démarrage (cf.
+    # presentation/api.py) : on mocke sensor_api pour ne pas appeler la
+    # vraie API mock pendant ce test, qui utilise le vrai lifespan (context
+    # manager TestClient) pour le SSE.
+    monkeypatch.setattr(api, "sensor_api", Mock(get_sites=Mock(return_value=[])))
 
     with TestClient(api.app) as client:
         response = client.get("/api/v1/alerts/stream")

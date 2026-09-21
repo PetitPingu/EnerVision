@@ -46,6 +46,12 @@ active_alerts_reader = PostgresActiveAlertsReader()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Préchauffe le cache de sites (cf. ApiMockClient.get_sites/SITES_CACHE_TTL)
+    # pendant que l'API mock est encore probablement disponible, avant que
+    # les tests/l'usage réel ne la sollicitent (elle répond parfois 401 sous
+    # forte charge). Sans repli local : si ce premier appel échoue aussi,
+    # get_sites() retente au prochain appel comme d'habitude.
+    sensor_api.get_sites()
     yield
     await alert_stream.close()
 
