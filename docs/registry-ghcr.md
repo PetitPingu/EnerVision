@@ -1,119 +1,118 @@
 # Registry GHCR — images applicatives
 
-Les images Docker des services EnerVision sont **construites et publiées en CI** (GitHub Actions) vers **GitHub Container Registry** (`ghcr.io`). Aucun push manuel n'est requis.
+Les images Docker des services EnerVision sont **construites et publiées en CI** (GitHub Actions) vers **GitHub Container Registry** (`ghcr.io`).
 
-Workflow : [`.github/workflows/images-build-push.yml`](../.github/workflows/images-build-push.yml)
+| Workflow | Rôle |
+|----------|------|
+| [images-build-push.yml](../.github/workflows/images-build-push.yml) | Build + push GHCR |
+| [deploy.yml](../.github/workflows/deploy.yml) | `terraform apply` sur la VM (pull GHCR) |
 
 ## Convention de nommage
 
 | Élément | Valeur |
 |---------|--------|
 | Registry | `ghcr.io` |
-| Owner GitHub | `petitpingu` (minuscules, requis par GHCR) |
+| Owner GitHub | `petitpingu` (minuscules) |
 | Préfixe | `ghcr.io/petitpingu/enervision` |
 | Exemple | `ghcr.io/petitpingu/enervision/core_api:sha-abc123…` |
 
-Services publiés (contexte de build = **racine du repo**) :
-
-| Service | Dockerfile |
-|---------|------------|
-| `core_api` | `apps/core_api/Dockerfile` |
-| `prediction` | `apps/prediction/Dockerfile` |
-| `recommendation` | `apps/recommendation/Dockerfile` |
-| `etl_worker` | `apps/etl_worker/Dockerfile` |
-| `dashboard` | `apps/dashboard/Dockerfile` |
-| `mlflow` | `mlflow/Dockerfile` |
-
-Les images tierces (Postgres, Traefik, MinIO, etc.) restent tirées depuis leurs registries publiques.
-
 ## Tags produits par la CI
 
-Sur **push** vers `dev` ou `main` :
+| Tag | Usage |
+|-----|--------|
+| `sha-<commit>` | Immutable — utilisé par le deploy automatique |
+| `dev` / `main` | Pointeur par branche |
+| `pr-<numéro>` | Tests PR (temporaire, push activé sur PR) |
+| `latest` | Uniquement sur `main` |
 
-| Tag | Exemple | Usage |
-|-----|---------|--------|
-| `sha-<commit>` | `sha-a1b2c3d4e5f6…` | Immutable, pour Terraform / rollback |
-| `<branche>` | `dev`, `main` | Pointeur mobile par environnement |
-| `latest` | — | Uniquement sur `main` |
+## Secrets GitHub (Settings → Secrets and variables → Actions)
 
-Sur **pull request** (temporaire, pour tests) : push activé avec le tag `pr-<numéro>` (ex. `pr-168`). À retirer une fois GHCR validé.
+Configurer avant le premier deploy :
 
-## Authentification
+| Secret | Description |
+|--------|-------------|
+| `VM_HOST` | IP ou hostname de la VM |
+| `SSH_USER` | Utilisateur SSH |
+| `SSH_PRIVATE_KEY` | Clé privée SSH (PEM, accès à la VM) |
+| `SSH_PORT` | (optionnel) Port SSH, défaut `22` |
+| `GHCR_USERNAME` | Compte GitHub avec `read:packages` |
+| `GHCR_READ_TOKEN` | PAT classic avec `read:packages` |
+| `DB_PASSWORD` | Mot de passe Postgres |
+| `MINIO_ROOT_PASSWORD` | Mot de passe MinIO |
+| `ENERVISION_API_USERNAME` | Identifiant API mock |
+| `ENERVISION_API_PASSWORD` | Mot de passe API mock |
+| `GRAFANA_ADMIN_PASSWORD` | Mot de passe Grafana |
+| `DEPLOY_HOST` | (optionnel) Hostname public pour les outputs Terraform (sinon `VM_HOST`) |
 
-### CI (push)
+**Variable** (non secrète) :
 
-Le workflow utilise le `GITHUB_TOKEN` fourni automatiquement par GitHub Actions, avec :
+| Variable | Description |
+|----------|-------------|
+| `DASHBOARD_API_BFF_URL` | URL publique de `core_api` au build dashboard |
 
-```yaml
-permissions:
-  packages: write
-```
+### Créer le PAT `GHCR_READ_TOKEN`
 
-Pas de PAT personnel ni de `gh auth refresh` côté développeur.
+1. GitHub → Settings → Developer settings → Personal access tokens (classic)
+2. Scopes : `read:packages` (+ `repo` si packages privés)
+3. Coller la valeur dans le secret `GHCR_READ_TOKEN`
 
-### VM (pull, étape deploy — à venir)
+## Prérequis VM
 
-Sur le serveur on-premise, un PAT en **lecture seule** (`read:packages`) sera injecté via GitHub Secrets au moment du déploiement Terraform :
+- Docker installé et démarré
+- Terraform `>= 1.5` installé
+- Utilisateur SSH membre du groupe `docker`
+- Port SSH accessible depuis les runners GitHub Actions
 
-```bash
-echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u <username> --password-stdin
-docker pull ghcr.io/petitpingu/enervision/core_api:sha-...
-```
+## Déploiement
 
-## Variable repository : dashboard
+### Automatique (après merge sur `dev` / `main`)
 
-Le dashboard Next.js embarque `NEXT_PUBLIC_API_BFF_URL` au **build**. Définir la variable de dépôt GitHub :
+1. `Build and push images` termine avec succès
+2. `Deploy (Terraform + GHCR)` se déclenche (`workflow_run`)
+3. Tag déployé : `sha-<commit>` du push
 
-- **Nom** : `DASHBOARD_API_BFF_URL`
-- **Valeur** : URL publique de `core_api` pour l'environnement cible (ex. `http://<host-vm>:8000`)
+### Manuel (tests PR sans merge)
 
-Si absente, la CI utilise `http://localhost:8000` par défaut.
+Actions → **Deploy (Terraform + GHCR)** → **Run workflow** → tag `pr-168` (ou autre).
 
-## Vérification après le premier push
+### Ce que fait le deploy
 
-1. Ouvrir [Packages — PetitPingu](https://github.com/orgs/PetitPingu/packages)
-2. Confirmer l'apparition des packages `enervision/<service>`
-3. **Package settings** → lier au dépôt `EnerVision` si nécessaire
-4. **Manage Actions access** → autoriser le dépôt
+1. `rsync` du dossier `infra/` vers `~/enervision-deploy/infra/` sur la VM
+2. `docker login ghcr.io` sur la VM
+3. `terraform apply` avec `build_images_locally=false` et le tag choisi
+4. État Terraform conservé sur la VM (`terraform.tfstate` local)
 
-## Dépannage CI
+## Terraform (variables)
 
-| Problème | Cause probable | Action |
-|----------|----------------|--------|
-| `permission_denied` sur push | `packages: write` manquant | Vérifier le bloc `permissions` du workflow |
-| Package invisible | Permissions org | Lier le package au repo |
-| Dashboard appelle la mauvaise API | Mauvaise URL au build | Définir `DASHBOARD_API_BFF_URL` |
-| Build échoue sur `packages/` | Contexte incorrect | Le `context` doit rester `.` (racine) |
+| Variable | Défaut | CI / VM |
+|----------|--------|---------|
+| `build_images_locally` | `true` | `false` |
+| `image_tag` | `dev` | `sha-<commit>` ou `pr-<n>` |
+| `ghcr_username` / `ghcr_read_token` | vide | depuis secrets |
+| `vm_host` / `ssh_user` | vide | optionnel (apply local via SSH Docker) |
 
-## Terraform
-
-Variables dans `infra/variables.tf` :
-
-| Variable | Défaut | Description |
-|----------|--------|-------------|
-| `build_images_locally` | `true` | `false` en CI/VM pour pull GHCR |
-| `image_registry_prefix` | `ghcr.io/petitpingu/enervision` | Préfixe des images |
-| `image_tag` | `dev` | Tag à déployer |
-
-Exemple pull GHCR (tests PR sans merge sur `dev`) :
+Apply local depuis un poste (sans workflow) :
 
 ```bash
 cd infra
 terraform apply \
   -var="build_images_locally=false" \
-  -var="image_tag=pr-168"
+  -var="image_tag=pr-168" \
+  -var="ghcr_username=VOTRE_USER" \
+  -var="ghcr_read_token=ghp_..."
 ```
 
-Exemple deploy après merge sur `dev` :
+## Dépannage
 
-```bash
-terraform apply \
-  -var="build_images_locally=false" \
-  -var="image_tag=sha-<commit>"
-```
+| Problème | Action |
+|----------|--------|
+| `permission_denied` sur push CI | `packages: write` dans le workflow build |
+| `unauthorized` sur pull VM | Vérifier `GHCR_READ_TOKEN` + `docker login` |
+| Terraform ne trouve pas l'image | Vérifier que le tag existe (build CI terminé) |
+| SSH échoue | Vérifier `SSH_PRIVATE_KEY`, firewall, `known_hosts` |
+| `terraform: command not found` sur VM | Installer Terraform sur la VM |
 
-## Prochaine étape
+## À faire plus tard
 
-1. Auth GHCR sur la VM (`docker login` via secret `GHCR_READ_TOKEN`)
-2. Workflow deploy CI : `terraform apply` avec `image_tag=sha-<commit>`
-3. Retirer le push sur PR du workflow une fois les tests terminés
+- Retirer le push sur PR du workflow build (une fois les tests terminés)
+- Backend Terraform distant (optionnel, si plusieurs opérateurs)

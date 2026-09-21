@@ -1,0 +1,116 @@
+name: Deploy (Terraform + GHCR)
+
+on:
+  workflow_run:
+    workflows: ["Build and push images (GHCR)"]
+    types: [completed]
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag GHCR à déployer (ex. pr-168, dev, sha-<commit>)"
+        required: true
+        default: "dev"
+
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Terraform apply on VM
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: image
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add VM to known hosts
+        env:
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          ssh-keyscan -p "$PORT" "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync infra to VM
+        env:
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          rsync -avz --delete \
+            -e "ssh -p ${PORT}" \
+            infra/ \
+            "${SSH_USER}@${VM_HOST}:~/enervision-deploy/infra/"
+
+      - name: Docker login + Terraform apply on VM
+        env:
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          TF_VAR_host: ${{ secrets.DEPLOY_HOST }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_minio_root_password: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          TF_VAR_enervision_api_username: ${{ secrets.ENERVISION_API_USERNAME }}
+          TF_VAR_enervision_api_password: ${{ secrets.ENERVISION_API_PASSWORD }}
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_dashboard_api_bff_url: ${{ vars.DASHBOARD_API_BFF_URL }}
+        run: |
+          PORT="${SSH_PORT:-22}"
+          TARGET="${SSH_USER}@${VM_HOST}"
+          DEPLOY_HOST="${TF_VAR_host:-$VM_HOST}"
+
+          ssh -p "$PORT" "$TARGET" env \
+            IMAGE_TAG="$IMAGE_TAG" \
+            GHCR_USERNAME="$GHCR_USERNAME" \
+            GHCR_READ_TOKEN="$GHCR_READ_TOKEN" \
+            TF_VAR_host="$DEPLOY_HOST" \
+            TF_VAR_db_password="$TF_VAR_db_password" \
+            TF_VAR_minio_root_password="$TF_VAR_minio_root_password" \
+            TF_VAR_enervision_api_username="$TF_VAR_enervision_api_username" \
+            TF_VAR_enervision_api_password="$TF_VAR_enervision_api_password" \
+            TF_VAR_grafana_admin_password="$TF_VAR_grafana_admin_password" \
+            TF_VAR_dashboard_api_bff_url="$TF_VAR_dashboard_api_bff_url" \
+            bash -s <<'REMOTE'
+          set -euo pipefail
+          cd ~/enervision-deploy/infra
+
+          echo "${GHCR_READ_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+
+          export TF_VAR_build_images_locally=false
+          export TF_VAR_image_tag="${IMAGE_TAG}"
+          export TF_VAR_docker_host="unix:///var/run/docker.sock"
+          export TF_VAR_docker_socket_path="/var/run/docker.sock"
+          export TF_VAR_ghcr_username="${GHCR_USERNAME}"
+          export TF_VAR_ghcr_read_token="${GHCR_READ_TOKEN}"
+          export TF_VAR_host="${TF_VAR_host}"
+
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+          REMOTE
