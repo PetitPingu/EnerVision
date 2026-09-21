@@ -76,6 +76,7 @@ jobs:
           tags: |
             type=sha,prefix=sha-,format=long
             type=ref,event=branch
+            type=ref,event=pr
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
@@ -83,8 +84,9 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          push: ${{ github.event_name == 'push' }}
-          load: ${{ github.event_name == 'pull_request' }}
+          # TEMPORAIRE : push aussi sur PR pour valider GHCR (tag pr-<numéro>).
+          # Remettre push: ${{ github.event_name == 'push' }} après les tests.
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: ${{ matrix.dashboard_build == true && format('NEXT_PUBLIC_API_BFF_URL={0}', vars.DASHBOARD_API_BFF_URL != '' && vars.DASHBOARD_API_BFF_URL || 'http://localhost:8000') || '' }}

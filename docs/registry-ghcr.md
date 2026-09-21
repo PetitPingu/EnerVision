@@ -36,7 +36,7 @@ Sur **push** vers `dev` ou `main` :
 | `<branche>` | `dev`, `main` | Pointeur mobile par environnement |
 | `latest` | — | Uniquement sur `main` |
 
-Sur **pull request** : build de validation uniquement (`push: false`), pas de publication.
+Sur **pull request** (temporaire, pour tests) : push activé avec le tag `pr-<numéro>` (ex. `pr-168`). À retirer une fois GHCR validé.
 
 ## Authentification
 
