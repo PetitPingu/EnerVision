@@ -1,5 +1,12 @@
 # Diagramme de séquence de l'authentification et du token JWT
 
+> **Statut : proposé, non implémenté.** Aucune route `/auth/login`, aucune
+> vérification de JWT et aucune table `users` n'existent dans le code à ce
+> jour (voir `USERS *(proposé)*` dans [archi_database.md](archi_database.md)) —
+> tous les endpoints de `core_api`, `prediction` et `recommendation` sont
+> actuellement ouverts, sans authentification. Ce diagramme documente le
+> design cible, à construire.
+
 #### Mermaid
 
 ```mermaid

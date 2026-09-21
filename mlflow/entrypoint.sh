@@ -1,10 +1,15 @@
 #!/bin/sh
 set -e
 
+export PGPASSWORD="$POSTGRES_PASSWORD"
+until psql -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1" >/dev/null 2>&1; do
+  echo "Waiting for PostgreSQL..."
+  sleep 2
+done
+
 # Schéma Postgres dédié à MLflow (voir docs/archi_infra.md : "backend store
 # de MLflow ... dans un schéma dédié - pas de base supplémentaire à
 # opérer"), créé ici car MLflow ne crée que ses tables, pas le schéma.
-export PGPASSWORD="$POSTGRES_PASSWORD"
 psql -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
   -c "CREATE SCHEMA IF NOT EXISTS ${MLFLOW_DB_SCHEMA:-mlflow};"
 
