@@ -18,7 +18,8 @@ test.describe("Login", () => {
     await expect(page.getByText("alice@example.com")).toBeVisible();
     await expect(page.getByRole("button", { name: "Se connecter" })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Se déconnecter" }).click();
+    await page.getByRole("button", { name: "Menu utilisateur" }).click();
+    await page.getByRole("menuitem", { name: "Se déconnecter" }).click();
 
     await expect(page.getByRole("button", { name: "Se connecter" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Menu utilisateur" })).toHaveCount(0);
