@@ -23,6 +23,13 @@ class Config:
 
     REQUEST_TIMEOUT = float(os.environ.get("ENERVISION_REQUEST_TIMEOUT", "5"))
 
+    # Les sites sont une référence quasi statique (7 sites de démo, cf.
+    # seed_sites.sql) : on les cache en mémoire pour éviter de marteler
+    # l'API mock (partagée avec les autres étudiants) à chaque chargement de
+    # page, celle-ci répondant parfois 401 sous forte charge (rate limiting
+    # côté nginx, pas un vrai souci d'identifiants).
+    SITES_CACHE_TTL = float(os.environ.get("SITES_CACHE_TTL_SECONDS", "60"))
+
     # Redis Streams (alert.detected, publié par etl_worker) : REDIS_HOST vaut
     # "redis" sous docker-compose (nom du service), "localhost" en dev hors
     # compose.

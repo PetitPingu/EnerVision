@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch
 
 from domain.entities import Reading, Site
 from infrastructure.api_client import ApiMockClient
+from infrastructure.config import Config
 from mockapi_client import EnergyReading, MockApiConnectionError, MockApiHTTPError, MockApiTimeoutError
 from mockapi_client import Alert as MockAlert
 from mockapi_client import Site as MockSite
@@ -61,6 +62,44 @@ def test_get_sites_success():
             status="active",
         )
     ]
+
+
+def test_get_sites_is_cached_within_ttl():
+    mock_inner = Mock()
+    mock_inner.get_sites.return_value = [_mock_site()]
+    client = _make_client(mock_inner)
+
+    client.get_sites()
+    client.get_sites()
+
+    mock_inner.get_sites.assert_called_once()
+
+
+def test_get_sites_refetches_after_ttl_expires():
+    mock_inner = Mock()
+    mock_inner.get_sites.return_value = [_mock_site()]
+    client = _make_client(mock_inner)
+
+    with patch("infrastructure.api_client.time.monotonic", side_effect=[0.0, 1000.0]):
+        client.get_sites()
+        client.get_sites()
+
+    assert mock_inner.get_sites.call_count == 2
+
+
+def test_get_sites_falls_back_to_stale_cache_on_error():
+    mock_inner = Mock()
+    mock_inner.get_sites.return_value = [_mock_site()]
+    client = _make_client(mock_inner)
+
+    with patch("infrastructure.api_client.time.monotonic", side_effect=[0.0, 1000.0]):
+        first = client.get_sites()
+
+        mock_inner.get_sites.side_effect = MockApiHTTPError(401, "rate limited")
+        second = client.get_sites()
+
+    assert second == first
+    assert second != []
 
 
 def test_get_current_reading_success():
