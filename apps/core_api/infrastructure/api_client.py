@@ -19,6 +19,70 @@ from .config import Config
 
 logger = logging.getLogger(__name__)
 
+# Repli statique utilisé uniquement si l'API mock échoue avant tout premier
+# succès (donc sans cache à resservir, cf. get_sites) : les 7 sites de démo,
+# en miroir de packages/db-schema/alembic/seeds/seed_sites.sql. Évite un
+# écran vide (ex. cases à cocher de sites dans l'admin) le temps que l'API
+# mock redevienne disponible.
+_FALLBACK_SITES = [
+    Site(
+        site_id="SITE001",
+        site_name="Bureau Paris La Défense",
+        site_type="office",
+        location="Paris, France",
+        capacity_kw=200,
+        status="active",
+    ),
+    Site(
+        site_id="SITE002",
+        site_name="Usine Lyon Vénissieux",
+        site_type="factory",
+        location="Lyon, France",
+        capacity_kw=1000,
+        status="active",
+    ),
+    Site(
+        site_id="SITE003",
+        site_name="Data Center Marseille",
+        site_type="datacenter",
+        location="Marseille, France",
+        capacity_kw=800,
+        status="active",
+    ),
+    Site(
+        site_id="SITE004",
+        site_name="Centre Commercial Lille",
+        site_type="retail",
+        location="Lille, France",
+        capacity_kw=400,
+        status="active",
+    ),
+    Site(
+        site_id="SITE005",
+        site_name="Hôpital Toulouse Purpan",
+        site_type="hospital",
+        location="Toulouse, France",
+        capacity_kw=600,
+        status="active",
+    ),
+    Site(
+        site_id="SITE006",
+        site_name="Bureau Bordeaux Centre",
+        site_type="office",
+        location="Bordeaux, France",
+        capacity_kw=180,
+        status="active",
+    ),
+    Site(
+        site_id="SITE007",
+        site_name="Usine Nantes Rezé",
+        site_type="factory",
+        location="Nantes, France",
+        capacity_kw=950,
+        status="active",
+    ),
+]
+
 
 class ApiMockClient(SensorApiPort):
     """Appelle l'API mock et ne lève jamais d'exception : les erreurs sont loggées."""
@@ -51,7 +115,8 @@ class ApiMockClient(SensorApiPort):
             # En cas d'échec (l'API mock répond parfois 401 sous forte charge,
             # cf. SITES_CACHE_TTL), on préfère resservir le dernier résultat
             # connu plutôt qu'une liste vide qui viderait les sites à l'écran.
-            return self._sites_cache if self._sites_cache is not None else []
+            # À froid (aucun succès précédent), on retombe sur _FALLBACK_SITES.
+            return self._sites_cache if self._sites_cache is not None else _FALLBACK_SITES
 
         self._sites_cache = [self._to_site(item) for item in sites]
         self._sites_cache_at = now

@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 
 from domain.entities import Reading, Site
-from infrastructure.api_client import ApiMockClient
+from infrastructure.api_client import _FALLBACK_SITES, ApiMockClient
 from infrastructure.config import Config
 from mockapi_client import EnergyReading, MockApiConnectionError, MockApiHTTPError, MockApiTimeoutError
 from mockapi_client import Alert as MockAlert
@@ -145,7 +145,7 @@ def test_api_unavailable_timeout_does_not_crash():
 
     sites = client.get_sites()
 
-    assert sites == []
+    assert sites == _FALLBACK_SITES
 
 
 def test_http_error_returns_default_without_crash():
@@ -155,7 +155,7 @@ def test_http_error_returns_default_without_crash():
 
     sites = client.get_sites()
 
-    assert sites == []
+    assert sites == _FALLBACK_SITES
 
 
 def test_get_readings_forwards_params_to_api_mock():
