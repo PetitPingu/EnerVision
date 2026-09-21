@@ -23,6 +23,13 @@ class Config:
 
     REQUEST_TIMEOUT = float(os.environ.get("ENERVISION_REQUEST_TIMEOUT", "5"))
 
+    # Les sites sont une référence quasi statique (7 sites de démo, cf.
+    # seed_sites.sql) : on les cache en mémoire pour éviter de marteler
+    # l'API mock (partagée avec les autres étudiants) à chaque chargement de
+    # page, celle-ci répondant parfois 401 sous forte charge (rate limiting
+    # côté nginx, pas un vrai souci d'identifiants).
+    SITES_CACHE_TTL = float(os.environ.get("SITES_CACHE_TTL_SECONDS", "60"))
+
     # Redis Streams (alert.detected, publié par etl_worker) : REDIS_HOST vaut
     # "redis" sous docker-compose (nom du service), "localhost" en dev hors
     # compose.
@@ -35,3 +42,11 @@ class Config:
 
     # Score de drift (ml_feature_drift_score), voir infrastructure/model_health_client.py.
     PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
+
+    # JWT (voir docs/seq_auth_token.md). Le défaut n'est valable qu'en dev :
+    # tout déploiement réel doit fournir JWT_SECRET_KEY explicitement.
+    JWT_SECRET_KEY = os.environ.get(
+        "JWT_SECRET_KEY", "dev-insecure-secret-change-me-in-production-32chars"
+    )
+    JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRE_MINUTES = int(os.environ.get("JWT_EXPIRE_MINUTES", "30"))

@@ -110,6 +110,43 @@ class PredictionLog(Base):
     generated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
+class User(Base):
+    """Compte utilisateur du dashboard (voir docs/archi_database.md, USERS
+    et docs/seq_auth_token.md pour le flux de login/JWT).
+
+    Volontairement isolée du reste : ne référence aucune autre table.
+    """
+
+    __tablename__ = "users"
+    __table_args__ = {"schema": "enervision"}
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String, unique=True)
+    password_hash: Mapped[str]
+    role: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
+
+
+class UserSite(Base):
+    """Association many-to-many : sites qu'un utilisateur (non-admin) est
+    autorisé à voir (voir docs/seq_auth_token.md — le rôle admin contourne
+    cette table et voit tous les sites, cf. apps/core_api/presentation/api.py).
+    """
+
+    __tablename__ = "user_sites"
+    __table_args__ = {"schema": "enervision"}
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("enervision.users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    site_id: Mapped[str] = mapped_column(
+        ForeignKey("enervision.sites.site_id"), primary_key=True
+    )
+
+
 class Recommendation(Base):
     """Conseil généré par le service Recommandation pour un site
     (voir docs/seq_predict_call.md, "Appel au Service Recommandation").

@@ -14,18 +14,32 @@ import json
 import os
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from typing import NamedTuple
 
-from fastapi import FastAPI, HTTPException, Query, Request
+import jwt
+from domain.entities import AlertEvent
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from domain.entities import AlertEvent
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from infrastructure.active_alerts_reader import PostgresActiveAlertsReader
 from infrastructure.api_client import ApiMockClient
+from infrastructure.auth import (
+    create_access_token,
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 from infrastructure.config import Config
+from infrastructure.login_throttle import is_locked_out, record_failed_attempt, reset_attempts
 from infrastructure.model_health_client import ModelHealthClient
+from infrastructure.password_policy import WeakPasswordError, validate_password_strength
 from infrastructure.prediction_client import PredictionApiClient
 from infrastructure.recommendation_client import RecommendationApiClient
 from infrastructure.redis_alert_stream import RedisAlertStreamReader
+from infrastructure.site_access_repository import SqlSiteAccessRepository
+from infrastructure.user_repository import SqlUserRepository
+from pydantic import BaseModel
 
 # Seuils de statut du drift, cohérents avec docs/monitoring_model.md
 # ("< 1 stable, 1-2 modéré, > 2 critique").
@@ -38,9 +52,14 @@ active_alerts_reader = PostgresActiveAlertsReader()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Préchauffe le cache de sites (cf. ApiMockClient.get_sites/SITES_CACHE_TTL)
+    # pendant que l'API mock est encore probablement disponible, avant que
+    # les tests/l'usage réel ne la sollicitent (elle répond parfois 401 sous
+    # forte charge). Sans repli local : si ce premier appel échoue aussi,
+    # get_sites() retente au prochain appel comme d'habitude.
+    sensor_api.get_sites()
     yield
     await alert_stream.close()
-
 
 app = FastAPI(
     title="EnerVision core_api",
@@ -66,6 +85,86 @@ sensor_api = ApiMockClient()
 prediction_api = PredictionApiClient()
 recommendation_api = RecommendationApiClient()
 model_health_api = ModelHealthClient()
+user_repository = SqlUserRepository()
+site_access_repository = SqlSiteAccessRepository()
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+class CurrentUser(NamedTuple):
+    email: str
+    role: str | None
+    user_id: str | None
+
+
+def require_auth(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> CurrentUser:
+    """Dépendance FastAPI : vérifie le JWT, retourne l'appelant (email/rôle/id).
+
+    Voir docs/seq_auth_token.md : chaque appel après /auth/login doit porter
+    un `Authorization: Bearer <JWT>` valide. role/uid viennent du token
+    (ajoutés au login, voir create_access_token) pour éviter un aller-retour
+    base à chaque requête.
+    """
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    try:
+        payload = decode_access_token(credentials.credentials)
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+    return CurrentUser(email=payload["sub"], role=payload.get("role"), user_id=payload.get("uid"))
+
+
+def require_admin(current_user: CurrentUser = Depends(require_auth)) -> CurrentUser:
+    """Dépendance FastAPI : comme require_auth, mais exige le rôle admin."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+    return current_user
+
+
+def _permitted_site_ids(current_user: CurrentUser) -> set[str] | None:
+    """None = accès à tous les sites (rôle admin). Sinon : ensemble autorisé."""
+    if current_user.role == "admin":
+        return None
+    if current_user.user_id is None:
+        return set()
+    return set(site_access_repository.get_site_ids(current_user.user_id))
+
+
+def _assert_site_access(current_user: CurrentUser, site_id: str) -> None:
+    permitted = _permitted_site_ids(current_user)
+    if permitted is not None and site_id not in permitted:
+        raise HTTPException(status_code=403, detail=f"Accès non autorisé au site {site_id}")
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    email: str
+    role: str | None
+    site_ids: list[str]
+
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    role: str | None = None
+    site_ids: list[str] = []
+
+
+class UpdateUserRequest(BaseModel):
+    role: str | None = None
+    site_ids: list[str] | None = None
 
 
 @app.get("/", tags=["Root"], summary="Root")
@@ -75,6 +174,8 @@ def root() -> dict:
         "endpoints": [
             "/docs",
             "/health",
+            "/auth/login",
+            "/admin/users",
             "/api/v1/sites",
             "/api/v1/sites/{site_id}/current",
             "/api/v1/readings",
@@ -94,24 +195,61 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.post("/auth/login", tags=["Auth"], summary="Authentification, retourne un JWT")
+def login(credentials: LoginRequest) -> TokenResponse:
+    """Vérifie email/mot de passe, retourne un JWT (voir docs/seq_auth_token.md).
+
+    Limite les tentatives (voir infrastructure/login_throttle.py, recommandé
+    par l'ANSSI en complément/alternative à un mot de passe très long).
+    """
+    if is_locked_out(credentials.email):
+        raise HTTPException(
+            status_code=429,
+            detail="Trop de tentatives échouées. Réessayez dans quelques minutes.",
+        )
+
+    user = user_repository.get_by_email(credentials.email)
+    if user is None or not verify_password(credentials.password, user.password_hash):
+        record_failed_attempt(credentials.email)
+        raise HTTPException(status_code=401, detail="Identifiants invalides")
+
+    reset_attempts(credentials.email)
+    token = create_access_token(user.email, role=user.role, uid=user.id)
+    return TokenResponse(access_token=token)
+
+
 @app.get("/api/v1/sites", tags=["Sites"], summary="Lister tous les sites")
-def list_sites() -> list:
-    """Relaie la liste des sites depuis l'API mock."""
-    return [asdict(site) for site in sensor_api.get_sites()]
+def list_sites(current_user: CurrentUser = Depends(require_auth)) -> list:
+    """Relaie la liste des sites depuis l'API mock, filtrée selon les sites
+    autorisés pour l'utilisateur connecté (voir _permitted_site_ids)."""
+    permitted = _permitted_site_ids(current_user)
+    sites = sensor_api.get_sites()
+    if permitted is not None:
+        sites = [site for site in sites if site.site_id in permitted]
+    return [asdict(site) for site in sites]
 
 
 @app.get(
-    "/api/v1/sites/{site_id}/current", tags=["Readings"], summary="Lecture temps réel d'un site"
+    "/api/v1/sites/{site_id}/current",
+    tags=["Readings"],
+    summary="Lecture temps réel d'un site",
 )
-def get_current_reading(site_id: str) -> dict:
+def get_current_reading(
+    site_id: str, current_user: CurrentUser = Depends(require_auth)
+) -> dict:
     """Relaie la mesure instantanée d'un site depuis l'API mock."""
+    _assert_site_access(current_user, site_id)
     reading = sensor_api.get_current_reading(site_id)
     if reading is None:
         raise HTTPException(status_code=404, detail=f"Aucune lecture disponible pour {site_id}")
     return asdict(reading)
 
 
-@app.get("/api/v1/readings", tags=["Readings"], summary="Historique des lectures")
+@app.get(
+    "/api/v1/readings",
+    tags=["Readings"],
+    summary="Historique des lectures",
+)
 def list_readings(
     site_id: str | None = Query(
         None, description="Filtrer par site (ex: SITE001). Si absent, retourne tous les sites."
@@ -125,23 +263,39 @@ def list_readings(
     limit: int = Query(
         100, ge=1, le=1000, description="Nombre maximum de résultats retournés (1-1000)."
     ),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> list:
     """Relaie l'historique des lectures depuis l'API mock (mêmes paramètres que la source)."""
+    permitted = _permitted_site_ids(current_user)
+    if site_id is not None:
+        _assert_site_access(current_user, site_id)
     readings = sensor_api.get_readings(
         site_id=site_id, start_time=start_time, end_time=end_time, limit=limit
     )
+    if permitted is not None:
+        readings = [r for r in readings if r.site_id in permitted]
     return [asdict(r) for r in readings]
 
 
-@app.get("/api/v1/alerts", tags=["Alerts"], summary="Alertes actives")
+@app.get(
+    "/api/v1/alerts",
+    tags=["Alerts"],
+    summary="Alertes actives",
+)
 def list_alerts(
     site_id: str | None = Query(None, description="Filtrer par site"),
     severity: str | None = Query(
         None, description="Filtrer par sévérité : low | medium | high | critical"
     ),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> list:
     """Relaie les alertes de consommation actives depuis l'API mock."""
+    permitted = _permitted_site_ids(current_user)
+    if site_id is not None:
+        _assert_site_access(current_user, site_id)
     alerts = sensor_api.get_alerts(site_id=site_id, severity=severity)
+    if permitted is not None:
+        alerts = [a for a in alerts if a.site_id in permitted]
     return [asdict(a) for a in alerts]
 
 
@@ -150,12 +304,20 @@ def list_alerts(
     tags=["Alerts"],
     summary="Snapshot des sites actuellement partial/degraded/critical",
 )
-def list_active_alerts() -> list:
+def list_active_alerts(current_user: CurrentUser = Depends(require_auth)) -> list:
     """État courant (pas le flux) : sert à amorcer la liste au chargement du
     dashboard, avant de prendre le relais avec /api/v1/alerts/stream — un
     site déjà partial/degraded/critical n'apparaît pas dans le flux tant
-    qu'il ne change pas de zone (anti-flood côté etl_worker)."""
-    return [_alert_event_dict(a) for a in active_alerts_reader.get_active()]
+    qu'il ne change pas de zone (anti-flood côté etl_worker).
+
+    Filtré par site autorisé comme le reste de l'API (voir
+    _permitted_site_ids) : appelé via apiClient (axios), qui porte le JWT.
+    """
+    permitted = _permitted_site_ids(current_user)
+    events = active_alerts_reader.get_active()
+    if permitted is not None:
+        events = [e for e in events if e.site_id in permitted]
+    return [_alert_event_dict(e) for e in events]
 
 
 def _alert_event_dict(event: AlertEvent) -> dict:
@@ -195,14 +357,29 @@ async def stream_alert_events(request: Request) -> StreamingResponse:
     """Diffuse en direct les transitions data_quality publiées par etl_worker
     sur Redis Streams (alert.detected) : "alert" en entrant en degraded/
     critical, "minor_alert" en entrant en partial, "recovery" au retour à
-    good."""
+    good.
+
+    Pas de require_auth ici : le front s'y connecte via EventSource
+    (apps/dashboard/src/hooks/alerts/useAlertStream.ts), qui ne permet pas
+    d'attacher un header Authorization. Contrairement à /api/v1/alerts/active,
+    ce flux reste donc non filtré par site — à revoir (jeton en query string ?)
+    si ça devient un vrai problème de confidentialité entre sites/utilisateurs.
+    """
     return StreamingResponse(_sse_alert_events(request, alert_stream), media_type="text/event-stream")
 
 
-@app.get("/api/v1/sensors/status", tags=["Sensors"], summary="État des capteurs par site")
-def sensors_status() -> dict:
+@app.get(
+    "/api/v1/sensors/status",
+    tags=["Sensors"],
+    summary="État des capteurs par site",
+)
+def sensors_status(current_user: CurrentUser = Depends(require_auth)) -> dict:
     """Relaie l'état de santé des capteurs par site depuis l'API mock."""
-    return sensor_api.get_sensors_status()
+    permitted = _permitted_site_ids(current_user)
+    status = sensor_api.get_sensors_status()
+    if permitted is not None:
+        status = {site_id: v for site_id, v in status.items() if site_id in permitted}
+    return status
 
 
 @app.get(
@@ -224,8 +401,10 @@ def list_predictions_range(
         "minute",
         description="Pas de la série retournée : 'minute' (défaut) ou 'hour'",
     ),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> dict:
     """Relaie GET /predict/range du service prediction."""
+    _assert_site_access(current_user, site_id)
     result = prediction_api.get_prediction_range(
         site_id=site_id, start_time=start_time, end_time=end_time, interval=interval
     )
@@ -241,8 +420,10 @@ def list_predictions_range(
 )
 def list_recommendations(
     site_id: str = Query(..., min_length=1, description="Site à recommander, ex: SITE001"),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> list:
     """Relaie GET /api/v1/recommendations du service recommendation."""
+    _assert_site_access(current_user, site_id)
     result = recommendation_api.get_recommendations(site_id=site_id)
     if result is None:
         raise HTTPException(status_code=502, detail="Service de recommandation indisponible")
@@ -256,6 +437,7 @@ def list_recommendations(
 )
 def get_drift(
     site_id: str = Query(..., min_length=1, description="Site à surveiller, ex: SITE001"),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> dict:
     """Relaie ml_feature_drift_score{site=...} depuis Prometheus (voir
     docs/monitoring_model.md). Ne renvoie jamais 502 : un score absent
@@ -270,6 +452,7 @@ def get_drift(
     mae_7d_kwh, utilisées en repli si une tranche d'horizon est absente,
     selon la période affichée) — pas un vrai intervalle de confiance
     statistique, voir docs/monitoring_model.md."""
+    _assert_site_access(current_user, site_id)
     score = model_health_api.get_drift_score(site_id)
     mae_24h_kwh = model_health_api.get_mae_24h(site_id)
     mae_7d_kwh = model_health_api.get_mae_7d(site_id)
@@ -292,3 +475,74 @@ def get_drift(
         "mae_7d_kwh": mae_7d_kwh,
         "mae_by_horizon": mae_by_horizon,
     }
+
+
+def _to_admin_response(user, site_ids: list[str] | None = None) -> AdminUserResponse:
+    if site_ids is None:
+        site_ids = [] if user.role == "admin" else site_access_repository.get_site_ids(user.id)
+    return AdminUserResponse(id=user.id, email=user.email, role=user.role, site_ids=site_ids)
+
+
+@app.get("/admin/users", tags=["Admin"], summary="Lister les utilisateurs")
+def admin_list_users(
+    _current_user: CurrentUser = Depends(require_admin),
+) -> list[AdminUserResponse]:
+    return [_to_admin_response(user) for user in user_repository.list_all()]
+
+
+@app.post("/admin/users", tags=["Admin"], summary="Créer un utilisateur")
+def admin_create_user(
+    body: CreateUserRequest, _current_user: CurrentUser = Depends(require_admin)
+) -> AdminUserResponse:
+    try:
+        validate_password_strength(body.password, email=body.email)
+    except WeakPasswordError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    try:
+        user = user_repository.create(body.email, hash_password(body.password), body.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    site_ids = body.site_ids if user.role != "admin" else []
+    if site_ids:
+        site_access_repository.set_site_ids(user.id, site_ids)
+    return _to_admin_response(user, site_ids=site_ids)
+
+
+@app.patch("/admin/users/{user_id}", tags=["Admin"], summary="Modifier le rôle/les sites d'un utilisateur")
+def admin_update_user(
+    user_id: str,
+    body: UpdateUserRequest,
+    current_user: CurrentUser = Depends(require_admin),
+) -> AdminUserResponse:
+    user = user_repository.get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    if body.role is not None:
+        if user.email == current_user.email and body.role != "admin":
+            raise HTTPException(
+                status_code=400, detail="Vous ne pouvez pas retirer votre propre rôle admin"
+            )
+        user = user_repository.update_role(user_id, body.role)
+
+    if body.site_ids is not None:
+        site_access_repository.set_site_ids(user_id, body.site_ids)
+
+    return _to_admin_response(user)
+
+
+@app.delete("/admin/users/{user_id}", tags=["Admin"], summary="Supprimer un utilisateur")
+def admin_delete_user(
+    user_id: str, current_user: CurrentUser = Depends(require_admin)
+) -> dict:
+    target = user_repository.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if target.email == current_user.email:
+        raise HTTPException(
+            status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte"
+        )
+    user_repository.delete(user_id)
+    return {"status": "deleted"}

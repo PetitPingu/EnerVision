@@ -4,8 +4,8 @@ Le service lit les variables d'environnement via `python-dotenv`
 (`infrastructure/config.py`). Le fichier `.env` à la **racine du monorepo**
 est partagé avec les autres services (ETL, core_api).
 
-Voir aussi `apps/prediction/.env.example` pour les variables spécifiques
-au service.
+Aucun `.env.example` n'est versionné (racine ou service) — voir
+`docs/data-storage.md` à la racine du repo.
 
 ## Variables du service
 
@@ -18,6 +18,7 @@ au service.
 | `MODEL_STORE` | `minio` | Backend de persistance : `minio` \| `mlflow` |
 | `MODEL_NAME` | `energy-consumption` | Préfixe des clés objet MinIO, et nom du modèle dans le Model Registry MLflow |
 | `MLFLOW_TRACKING_URI` | `http://localhost:5000` | Serveur MLflow, utilisé si `MODEL_STORE=mlflow` |
+| `RETRAIN_INTERVAL_HOURS` | `24` | Intervalle du cron de ré-entraînement (APScheduler, `main.py`) |
 
 ## Variables MinIO (partagées avec l'ETL)
 
@@ -68,7 +69,7 @@ Le service `prediction` reçoit :
 ```yaml
 DATABASE_URL: postgresql+psycopg://...@postgres:5432/enervision
 TRAINING_DATA_SOURCE: postgres
-MODEL_STORE: minio  # ou "mlflow"
+MODEL_STORE: mlflow  # docker-compose.yml fixe "mlflow" explicitement (défaut du code : "minio")
 MODEL_NAME: energy-consumption
 MINIO_ENDPOINT: minio:9000
 MINIO_MODELS_BUCKET: models

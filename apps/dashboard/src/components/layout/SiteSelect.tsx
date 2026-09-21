@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSelection } from "@/contexts/SiteSelectionContext";
 
 function formatSiteLabel(site: {
@@ -11,8 +12,13 @@ function formatSiteLabel(site: {
 }
 
 export function SiteSelect() {
+  const { isAuthenticated } = useAuth();
   const { sites, selectedSiteId, setSelectedSiteId, isLoading, error } =
     useSiteSelection();
+
+  // Pas connecté : l'appel /api/v1/sites échoue forcément (401), attendu -
+  // pas une vraie erreur à signaler.
+  if (!isAuthenticated) return null;
 
   if (error) {
     return (

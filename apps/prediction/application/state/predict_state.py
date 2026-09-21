@@ -1,8 +1,7 @@
 """Use case : prédire l'état on/off de chaque capteur d'un site à partir du
-dernier modèle publié, puis en déduire l'état global (data_quality) selon le
-nombre de capteurs prédits off (voir derive_state)."""
+dernier modèle de classification publié."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
@@ -11,26 +10,6 @@ from sklearn.pipeline import Pipeline
 
 from application.ports import ModelStorePort, SavedModelMetadata
 from infrastructure.ml.state.features import FEATURE_COLUMNS, SENSOR_COLUMNS
-
-
-# Nombre de capteurs prédits off à partir duquel le site bascule dans l'état
-# donné. Règle métier volontairement hors du modèle : elle s'ajuste ici sans
-# ré-entraîner. 0 capteur off = good.
-CRITICAL_MIN_OFF = 4
-DEGRADED_MIN_OFF = 3
-PARTIAL_MIN_OFF = 1
-
-
-def derive_state(off_count: int) -> str:
-    """État global (good/partial/degraded/critical) d'un site selon le nombre
-    de capteurs prédits off."""
-    if off_count >= CRITICAL_MIN_OFF:
-        return "critical"
-    if off_count >= DEGRADED_MIN_OFF:
-        return "degraded"
-    if off_count >= PARTIAL_MIN_OFF:
-        return "partial"
-    return "good"
 
 
 class StateModelNotLoadedError(Exception):
@@ -43,11 +22,9 @@ class StatePredictionResult:
 
     site_id: str
     target_timestamp: datetime
-    predicted_state: str
+    # "on"/"off" prédit pour chaque capteur (clés = SENSOR_COLUMNS).
+    sensors: dict[str, str]
     model_version: str
-    # "on"/"off" prédit par capteur ; vide pour un ancien modèle qui prédisait
-    # directement l'état global.
-    sensors: dict[str, str] = field(default_factory=dict)
 
 
 def predict_state(
@@ -56,29 +33,26 @@ def predict_state(
     site_id: str,
     target_timestamp: datetime,
 ) -> StatePredictionResult:
-    """Charge le dernier modèle d'état, prédit chaque capteur on/off pour le
-    site et l'instant donnés, puis en déduit l'état global."""
+    """Charge le dernier modèle d'état et prédit l'état on/off de chaque
+    capteur pour le site et l'instant donnés."""
     pipeline, metadata = _load_latest_model(model_store, model_name)
     x = _build_prediction_input(site_id, target_timestamp)
     prediction = np.asarray(pipeline.predict(x))[0]
 
     if prediction.ndim == 0:
-        # Ancien modèle : une seule sortie, l'état global directement.
-        sensors: dict[str, str] = {}
-        predicted_state = str(prediction)
-    else:
-        sensors = {
-            name: "on" if value else "off"
-            for name, value in zip(SENSOR_COLUMNS, prediction)
-        }
-        predicted_state = derive_state(list(sensors.values()).count("off"))
+        # Ancien modèle qui prédisait un état global : plus exploitable tel quel.
+        raise StateModelNotLoadedError(
+            f"Le modele '{model_name}' est un ancien modele, un reentrainement est necessaire"
+        )
 
     return StatePredictionResult(
         site_id=site_id,
         target_timestamp=target_timestamp,
-        predicted_state=predicted_state,
+        sensors={
+            name: "on" if value else "off"
+            for name, value in zip(SENSOR_COLUMNS, prediction)
+        },
         model_version=metadata.trained_at,
-        sensors=sensors,
     )
 
 

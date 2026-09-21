@@ -7,7 +7,7 @@ dépendance).
 
 from abc import ABC, abstractmethod
 
-from domain.entities import Alert, AlertEvent, Reading, Site
+from domain.entities import Alert, AlertEvent, Reading, Site, User
 
 
 class SensorApiPort(ABC):
@@ -38,6 +38,50 @@ class SensorApiPort(ABC):
     @abstractmethod
     def get_sensors_status(self) -> dict:
         """État de santé des capteurs par site. Retourne {} si indisponible."""
+
+
+class UserRepositoryPort(ABC):
+    """Accès aux comptes utilisateurs, quelle que soit la source réelle."""
+
+    @abstractmethod
+    def get_by_email(self, email: str) -> User | None:
+        """Utilisateur correspondant à cet email. Retourne None si inconnu."""
+
+    @abstractmethod
+    def get_by_id(self, user_id: str) -> User | None:
+        """Utilisateur correspondant à cet id. Retourne None si inconnu."""
+
+    @abstractmethod
+    def list_all(self) -> list[User]:
+        """Tous les comptes utilisateurs (page admin)."""
+
+    @abstractmethod
+    def create(self, email: str, password_hash: str, role: str | None) -> User:
+        """Crée un utilisateur. Lève ValueError si l'email existe déjà."""
+
+    @abstractmethod
+    def update_role(self, user_id: str, role: str | None) -> User | None:
+        """Met à jour le rôle. Retourne None si l'utilisateur est inconnu."""
+
+    @abstractmethod
+    def delete(self, user_id: str) -> bool:
+        """Supprime l'utilisateur. Retourne False s'il était déjà inconnu."""
+
+
+class SiteAccessPort(ABC):
+    """Sites qu'un utilisateur (non-admin) est autorisé à voir.
+
+    Le rôle admin contourne cette table (voir presentation/api.py) : elle
+    ne concerne que les comptes non-admin.
+    """
+
+    @abstractmethod
+    def get_site_ids(self, user_id: str) -> list[str]:
+        """Sites assignés à cet utilisateur."""
+
+    @abstractmethod
+    def set_site_ids(self, user_id: str, site_ids: list[str]) -> None:
+        """Remplace l'ensemble des sites assignés à cet utilisateur."""
 
 
 class AlertStreamPort(ABC):

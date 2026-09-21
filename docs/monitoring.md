@@ -43,8 +43,8 @@ Une fois `docker compose up -d` lancé :
 
 | Service | URL |
 |---|---|
-| Grafana | http://localhost:${GRAFANA_PORT:-3001} (login: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`, voir `.env`) |
-| Prometheus | http://localhost:${PROMETHEUS_PORT:-9090} |
+| Grafana | http://grafana.localhost (via Traefik — plus de port publié directement, voir `docker-compose.yml` ; login: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`, voir `.env`) |
+| Prometheus | http://localhost:${PROMETHEUS_PORT:-9090} (bindé sur `127.0.0.1` uniquement) ou http://prometheus.localhost via Traefik |
 
 Le dashboard **EnerVision - Vue d'ensemble infra** est dans le dossier
 **EnerVision** de Grafana, organisé en 4 sections repliables (une rangée
@@ -60,7 +60,7 @@ prochainement, donc traité comme un vrai risque et pas seulement théorique) :
   autres containers du réseau `enervision-net` continuent d'accéder à MinIO
   normalement (le binding host n'affecte pas le réseau docker interne), et
   le workflow dev où `etl_worker` tourne hors docker-compose
-  (`MINIO_ENDPOINT=localhost:9000`, voir `apps/etl_worker/.env.example`)
+  (`MINIO_ENDPOINT=localhost:9000`, à définir dans le `.env` racine)
   continue de fonctionner. Seul l'accès depuis le réseau externe est coupé.
 - **Endpoint `/minio/v2/metrics/cluster` protégé par JWT** (comportement
   par défaut de MinIO, pas de `MINIO_PROMETHEUS_AUTH_TYPE=public`) : sans le
@@ -69,8 +69,9 @@ prochainement, donc traité comme un vrai risque et pas seulement théorique) :
 
 Reste à changer avant un déploiement réel : les mots de passe par défaut
 (`POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`...)
-qui valent tous `changeme*` dans `.env.example`, cohérent avec le reste du
-projet mais à ne jamais garder en prod.
+qui valent tous `changeme*` par convention dans ce projet (aucun
+`.env.example` versionné, voir `docs/data-storage.md`) mais à ne jamais
+garder en prod.
 
 ## Indicateurs suivis
 

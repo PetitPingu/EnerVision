@@ -148,7 +148,7 @@ def predict_range(
     }
 
 
-@app.get("/predict/state", tags=["Prediction"], summary="Prédit l'état futur du capteur")
+@app.get("/predict/state", tags=["Prediction"], summary="Prédit l'état on/off des capteurs")
 def predict_state(
     site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
     timestamp: str = Query(
@@ -156,8 +156,7 @@ def predict_state(
         description="Horodatage cible au format ISO8601, ex: 2026-09-17T14:30:00Z",
     ),
 ) -> dict:
-    """Prédit l'état (data_quality : good/partial/degraded/critical) d'un
-    site à un instant donné."""
+    """Prédit l'état on/off de chaque capteur d'un site à un instant donné."""
     target_timestamp = _parse_iso8601(timestamp)
     if target_timestamp is None:
         raise HTTPException(
@@ -178,7 +177,7 @@ def predict_state(
     return {
         "site_id": result.site_id,
         "target_timestamp": _format_iso8601(result.target_timestamp),
-        "predicted_state": result.predicted_state,
+        "sensors": result.sensors,
         "model_version": result.model_version,
     }
 

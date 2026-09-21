@@ -19,7 +19,8 @@ implémente `ModelStorePort`, exactement comme `MinioModelStore`. Les deux
 **coexistent** derrière la variable `MODEL_STORE` — voir
 [configuration.md](configuration.md). `docker-compose.yml` fixe
 `MODEL_STORE=mlflow` pour le service `prediction` : c'est l'implémentation
-réellement utilisée par `/predict` et `train_and_publish` aujourd'hui
+réellement utilisée par `/predict` et par le ré-entraînement planifié
+(`retrain_if_better`, cron APScheduler dans `main.py`) aujourd'hui
 (`minio` reste le défaut du code si la variable n'est pas définie, ex. en
 local hors Docker sans la surcharger). Aucune suppression de
 `MinioModelStore` : décision explicite, la bascule définitive fera l'objet
@@ -145,5 +146,5 @@ localement sur `apps/prediction` : 0 vulnérabilité restante.
 
 ## Ce qui n'est pas fait
 
-- Pas de **stages** (`Staging`/`Production`) — seul l'alias `current` existe. `seq_prediction.md` mentionne une transition vers un stage "Production" : pas implémenté ici.
-- Pas de **rétention/nettoyage** des anciennes versions — chaque `save()` en crée une nouvelle, indéfiniment.
+- Pas de **stages** (`Staging`/`Production`) — seul l'alias `current` existe (`docs/seq_prediction.md` a été corrigé en conséquence, il ne mentionne plus de stage "Production").
+- Pas de **rétention/nettoyage** des anciennes versions — chaque `register()`/`save()` en crée une nouvelle, indéfiniment.
