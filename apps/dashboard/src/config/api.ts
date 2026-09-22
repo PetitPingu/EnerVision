@@ -25,3 +25,7 @@ export const ALERTS_ACTIVE_ENDPOINT = "/api/v1/alerts/active";
 export const PREDICTIONS_SENSORS_ENDPOINT = "/api/v1/predictions/sensors";
 
 export const PREDICTIONS_SENSORS_RANGE_ENDPOINT = "/api/v1/predictions/sensors/range";
+
+export const MODEL_HEALTH_DRIFT_ENDPOINT = "/api/v1/model-health/drift";
+
+export const SENSORS_STATUS_ENDPOINT = "/api/v1/sensors/status";

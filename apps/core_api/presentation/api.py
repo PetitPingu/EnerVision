@@ -33,6 +33,7 @@ from infrastructure.auth import (
 )
 from infrastructure.config import Config
 from infrastructure.login_throttle import is_locked_out, record_failed_attempt, reset_attempts
+from infrastructure.model_health_client import ModelHealthClient
 from infrastructure.password_policy import WeakPasswordError, validate_password_strength
 from infrastructure.prediction_client import PredictionApiClient, PredictionModelNotLoadedError
 from infrastructure.recommendation_client import RecommendationApiClient
@@ -40,6 +41,11 @@ from infrastructure.redis_alert_stream import RedisAlertStreamReader
 from infrastructure.site_access_repository import SqlSiteAccessRepository
 from infrastructure.user_repository import SqlUserRepository
 from pydantic import BaseModel
+
+# Seuils de statut du drift, cohérents avec docs/monitoring_model.md
+# ("< 1 stable, 1-2 modéré, > 2 critique").
+DRIFT_MODERATE_THRESHOLD = 1.0
+DRIFT_CRITICAL_THRESHOLD = 2.0
 
 alert_stream = RedisAlertStreamReader()
 active_alerts_reader = PostgresActiveAlertsReader()
@@ -80,6 +86,7 @@ app.add_middleware(
 sensor_api = ApiMockClient()
 prediction_api = PredictionApiClient()
 recommendation_api = RecommendationApiClient()
+model_health_api = ModelHealthClient()
 user_repository = SqlUserRepository()
 site_access_repository = SqlSiteAccessRepository()
 
@@ -183,6 +190,7 @@ def root() -> dict:
             "/api/v1/predictions/sensors",
             "/api/v1/predictions/sensors/range",
             "/api/v1/recommendations",
+            "/api/v1/model-health/drift",
         ]
     }
 
@@ -511,6 +519,53 @@ def list_recommendations(
     if result is None:
         raise HTTPException(status_code=502, detail="Service de recommandation indisponible")
     return result
+
+
+@app.get(
+    "/api/v1/model-health/drift",
+    tags=["Model health"],
+    summary="Score de drift du modèle pour un site",
+)
+def get_drift(
+    site_id: str = Query(..., min_length=1, description="Site à surveiller, ex: SITE001"),
+    current_user: CurrentUser = Depends(require_auth),
+) -> dict:
+    """Relaie ml_feature_drift_score{site=...} depuis Prometheus (voir
+    docs/monitoring_model.md). Ne renvoie jamais 502 : un score absent
+    (Prometheus indisponible, ou échantillon insuffisant côté
+    ModelHealthJob) est un état normal (statut "unknown"), pas une panne —
+    le badge de drift ne doit pas faire échouer le reste du dashboard.
+
+    Inclut aussi mae_24h_kwh, mae_7d_kwh et mae_by_horizon : sert au
+    dashboard à dessiner une marge d'erreur empirique autour de la courbe
+    de prévision, qui s'élargit avec l'horizon de la prédiction
+    (mae_by_horizon) plutôt qu'une largeur constante (mae_24h_kwh /
+    mae_7d_kwh, utilisées en repli si une tranche d'horizon est absente,
+    selon la période affichée) — pas un vrai intervalle de confiance
+    statistique, voir docs/monitoring_model.md."""
+    _assert_site_access(current_user, site_id)
+    score = model_health_api.get_drift_score(site_id)
+    mae_24h_kwh = model_health_api.get_mae_24h(site_id)
+    mae_7d_kwh = model_health_api.get_mae_7d(site_id)
+    mae_by_horizon = model_health_api.get_mae_by_horizon(site_id)
+
+    if score is None:
+        status = "unknown"
+    elif score > DRIFT_CRITICAL_THRESHOLD:
+        status = "critical"
+    elif score > DRIFT_MODERATE_THRESHOLD:
+        status = "moderate"
+    else:
+        status = "stable"
+
+    return {
+        "site_id": site_id,
+        "drift_score": score,
+        "status": status,
+        "mae_24h_kwh": mae_24h_kwh,
+        "mae_7d_kwh": mae_7d_kwh,
+        "mae_by_horizon": mae_by_horizon,
+    }
 
 
 def _to_admin_response(user, site_ids: list[str] | None = None) -> AdminUserResponse:

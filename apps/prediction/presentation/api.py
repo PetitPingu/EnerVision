@@ -10,6 +10,7 @@ Lancer en local (depuis apps/prediction) :
 Puis ouvrir http://127.0.0.1:8002/docs pour explorer les endpoints.
 """
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query
@@ -18,6 +19,7 @@ from application.consumption.predict import (
     InvalidIntervalError,
     InvalidPredictionRangeError,
     ModelNotLoadedError,
+    PredictionResult,
     predict as run_predict,
     predict_range as run_predict_range,
 )
@@ -30,6 +32,9 @@ from application.state.predict_state import (
 )
 from infrastructure.config import Config
 from infrastructure.model_store import create_model_store
+from infrastructure.prediction_log_writer import PredictionLogWriter
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="EnerVision prediction",
@@ -84,6 +89,8 @@ def predict(
         )
     except ModelNotLoadedError:
         raise HTTPException(status_code=503, detail="model not loaded")
+
+    _log_prediction(result)
 
     return {
         "site_id": result.site_id,
@@ -263,3 +270,18 @@ def _format_iso8601(value: datetime) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _log_prediction(result: PredictionResult) -> None:
+    """Écrit la prédiction dans predictions_log, sans faire échouer /predict
+    si Postgres est indisponible (le rapprochement la ratera, mais la
+    réponse au client reste servie)."""
+    try:
+        PredictionLogWriter().log(
+            site_id=result.site_id,
+            target_timestamp=result.target_timestamp,
+            predicted_consumption_kwh=result.predicted_consumption_kwh,
+            model_version=result.model_version,
+        )
+    except Exception:  # noqa: BLE001 - écriture d'audit best-effort
+        logger.exception("predictions_log write failed for site_id=%s", result.site_id)
