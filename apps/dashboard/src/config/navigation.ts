@@ -1,4 +1,4 @@
-export type NavIcon = "dashboard" | "prediction" | "sites" | "prediction";
+export type NavIcon = "dashboard" | "sites" | "prediction" | "admin";
 
 export type NavItem = {
   label: string;
