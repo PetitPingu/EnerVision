@@ -124,27 +124,23 @@ export function SiteSensorsModal({ site, status, onClose }: SiteSensorsModalProp
                     </span>
                   </div>
 
-                  {isFailing && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => togglePrediction(name)}
-                        className="mt-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-900"
-                      >
-                        {expandedSensor === name
-                          ? "Masquer la prédiction"
-                          : "Faire la prédiction pour ce capteur →"}
-                      </button>
+                  <button
+                    type="button"
+                    onClick={() => togglePrediction(name)}
+                    className="mt-1.5 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-900"
+                  >
+                    {expandedSensor === name
+                      ? "Masquer la prédiction"
+                      : "Faire la prédiction pour ce capteur →"}
+                  </button>
 
-                      {expandedSensor === name && (
-                        <SensorNextStatePrediction
-                          siteId={site.site_id}
-                          sensorCategory={name}
-                          sensorLabel={sensorLabel}
-                          siteName={site.site_name ?? site.site_id}
-                        />
-                      )}
-                    </>
+                  {expandedSensor === name && (
+                    <SensorNextStatePrediction
+                      siteId={site.site_id}
+                      sensorCategory={name}
+                      sensorLabel={sensorLabel}
+                      siteName={site.site_name ?? site.site_id}
+                    />
                   )}
                 </li>
               );
