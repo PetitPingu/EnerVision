@@ -50,6 +50,7 @@ resource "docker_container" "prediction" {
   ports {
     internal = 8000
     external = var.prediction_port
+    ip       = "127.0.0.1"
   }
 
   labels {
@@ -101,6 +102,7 @@ resource "docker_container" "recommendation" {
   ports {
     internal = 8000
     external = var.recommendation_port
+    ip       = "127.0.0.1"
   }
 
   labels {
