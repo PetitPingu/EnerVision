@@ -14,6 +14,7 @@ type UseSensorStatePredictionResult = {
 };
 
 export function useSensorStatePrediction(
+  /** Vide = pas d'appel (ex. capteur sans modèle prédictif côté front). */
   siteId: string,
   timestamp: string,
 ): UseSensorStatePredictionResult {
@@ -26,6 +27,14 @@ export function useSensorStatePrediction(
     let cancelled = false;
 
     async function fetchPrediction() {
+      if (!siteId) {
+        setData(null);
+        setModelNotLoaded(false);
+        setError(null);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
 
       try {

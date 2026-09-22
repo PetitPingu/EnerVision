@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SensorPredictionPlaceholder } from "@/components/features/sites/SensorPredictionPlaceholder";
+import { SensorNextStatePrediction } from "@/components/features/sites/SensorNextStatePrediction";
 import type { Site } from "@/types/site";
 import type { SiteSensorStatus } from "@/types/sensorStatus";
 
@@ -137,7 +137,9 @@ export function SiteSensorsModal({ site, status, onClose }: SiteSensorsModalProp
                       </button>
 
                       {expandedSensor === name && (
-                        <SensorPredictionPlaceholder
+                        <SensorNextStatePrediction
+                          siteId={site.site_id}
+                          sensorCategory={name}
                           sensorLabel={sensorLabel}
                           siteName={site.site_name ?? site.site_id}
                         />
