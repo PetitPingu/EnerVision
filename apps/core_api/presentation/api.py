@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from infrastructure.active_alerts_reader import PostgresActiveAlertsReader
+from infrastructure.latest_readings_reader import PostgresLatestReadingsReader
 from infrastructure.api_client import ApiMockClient
 from infrastructure.auth import (
     create_access_token,
@@ -42,6 +43,7 @@ from pydantic import BaseModel
 
 alert_stream = RedisAlertStreamReader()
 active_alerts_reader = PostgresActiveAlertsReader()
+latest_readings_reader = PostgresLatestReadingsReader()
 
 
 @asynccontextmanager
@@ -172,6 +174,7 @@ def root() -> dict:
             "/api/v1/sites",
             "/api/v1/sites/{site_id}/current",
             "/api/v1/readings",
+            "/api/v1/readings/latest",
             "/api/v1/alerts",
             "/api/v1/alerts/stream",
             "/api/v1/alerts/active",
@@ -312,6 +315,27 @@ def list_active_alerts(current_user: CurrentUser = Depends(require_auth)) -> lis
     if permitted is not None:
         events = [e for e in events if e.site_id in permitted]
     return [_alert_event_dict(e) for e in events]
+
+
+@app.get(
+    "/api/v1/readings/latest",
+    tags=["Readings"],
+    summary="Dernière lecture connue de chaque site (notre base, pas l'API mock)",
+)
+def list_latest_readings(current_user: CurrentUser = Depends(require_auth)) -> list:
+    """Dernière lecture de readings_curated pour chaque site, toutes
+    qualités confondues (good compris, contrairement à /api/v1/alerts/active).
+
+    Contrairement à GET /api/v1/sites/{site_id}/current (relais direct de
+    l'API mock), c'est ce qu'etl_worker a réellement ingéré et stocké —
+    utilisé pour l'état des capteurs affiché dans le dashboard (SiteCard,
+    SiteSensorsModal), cohérent avec ce que le modèle d'état apprend.
+    """
+    permitted = _permitted_site_ids(current_user)
+    readings = latest_readings_reader.get_latest()
+    if permitted is not None:
+        readings = [r for r in readings if r.site_id in permitted]
+    return [asdict(r) for r in readings]
 
 
 def _alert_event_dict(event: AlertEvent) -> dict:

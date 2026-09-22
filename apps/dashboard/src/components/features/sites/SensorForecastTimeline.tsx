@@ -37,7 +37,7 @@ function combinePoint(point: SensorStateRangePoint, modelSensorKeys: string[]): 
 
 type SensorForecastTimelineProps = {
   siteId: string;
-  /** Clé de types/sensorStatus.ts (consumption/electrical/temperature/humidity/network). */
+  /** Clé de SENSOR_STATUS_TO_MODEL_SENSORS (consumption/electrical/temperature/humidity/network). */
   sensorCategory: string;
   sensorLabel: string;
   siteName: string;

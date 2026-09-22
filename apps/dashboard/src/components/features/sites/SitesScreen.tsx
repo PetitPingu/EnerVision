@@ -4,7 +4,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { SiteCard } from "@/components/features/sites/SiteCard";
 import { SitesSummaryCards } from "@/components/features/sites/SitesSummaryCards";
 import { useSiteSelection } from "@/contexts/SiteSelectionContext";
-import { useSensorsStatus } from "@/hooks/sites/useSensorsStatus";
+import { useLatestReadings } from "@/hooks/sites/useLatestReadings";
+import { deriveSensorCategoryStatus } from "@/lib/format/sensorCategory";
 
 function formatUpdatedAt(date: Date): string {
   return date.toLocaleTimeString("fr-FR", {
@@ -16,23 +17,21 @@ function formatUpdatedAt(date: Date): string {
 
 export function SitesScreen() {
   const { sites, isLoading: isSitesLoading, error: sitesError } = useSiteSelection();
-  const {
-    data: sensorsStatus,
-    isLoading: isStatusLoading,
-    lastUpdatedAt,
-  } = useSensorsStatus();
+  const { data: latestReadings, isLoading: isReadingsLoading, lastUpdatedAt } =
+    useLatestReadings();
 
-  const isLoading = isSitesLoading || isStatusLoading;
+  const isLoading = isSitesLoading || isReadingsLoading;
 
-  // Total on/off des capteurs, tous sites confondus (pas un mélange de
-  // compteurs de nature différente : capteurs vs sites, voir historique).
+  // Total on/off des capteurs, tous sites confondus, dérivé de notre base
+  // (readings_curated) — pas un mélange de compteurs de nature différente
+  // (capteurs vs sites, voir historique de ce composant).
   let sensorsOnCount = 0;
   let sensorsOffCount = 0;
 
   for (const site of sites) {
-    const sensors = Object.values(sensorsStatus[site.site_id]?.sensors ?? {});
-    for (const sensor of sensors) {
-      if (sensor.status === "failing") {
+    const categoryStatus = deriveSensorCategoryStatus(latestReadings[site.site_id] ?? null);
+    for (const status of Object.values(categoryStatus)) {
+      if (status === "failing") {
         sensorsOffCount += 1;
       } else {
         sensorsOnCount += 1;
@@ -85,7 +84,7 @@ export function SitesScreen() {
               <SiteCard
                 key={site.site_id}
                 site={site}
-                status={sensorsStatus[site.site_id]}
+                reading={latestReadings[site.site_id]}
               />
             ))}
           </div>

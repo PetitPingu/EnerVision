@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { SensorForecastTimeline } from "@/components/features/sites/SensorForecastTimeline";
-import { useCurrentReading } from "@/hooks/sites/useCurrentReading";
+import { DATA_QUALITY_LABELS, DATA_QUALITY_PILL_STYLES } from "@/lib/format/dataQuality";
 import { deriveSensorCategoryStatus } from "@/lib/format/sensorCategory";
-import type { DataQuality } from "@/types/consumption";
+import type { ConsumptionReading } from "@/types/consumption";
 import type { Site } from "@/types/site";
 
 const SENSOR_LABELS: Record<string, string> = {
@@ -12,40 +12,23 @@ const SENSOR_LABELS: Record<string, string> = {
   electrical: "Électrique",
   temperature: "Température",
   humidity: "Humidité",
-  network: "Réseau",
-};
-
-// data_quality de la dernière lecture (readings_curated), pas une sévérité
-// recalculée côté front à partir des capteurs en panne — voir
-// useCurrentReading / GET /api/v1/sites/{site_id}/current.
-const DATA_QUALITY_LABELS: Record<DataQuality, string> = {
-  good: "normal",
-  partial: "partiel",
-  degraded: "dégradé",
-  critical: "critique",
-};
-
-const DATA_QUALITY_PILL_STYLES: Record<DataQuality, string> = {
-  good: "border-blue-200 text-blue-700",
-  partial: "border-amber-200 text-amber-700",
-  degraded: "border-orange-200 text-orange-700",
-  critical: "border-red-200 text-red-700",
 };
 
 type SiteSensorsModalProps = {
   site: Site;
+  /** Dernière lecture connue du site (readings_curated), fournie par le
+   * parent (SiteCard) — polling partagé, pas un fetch propre à la modale. */
+  reading: ConsumptionReading | undefined;
   onClose: () => void;
 };
 
-export function SiteSensorsModal({ site, onClose }: SiteSensorsModalProps) {
+export function SiteSensorsModal({ site, reading, onClose }: SiteSensorsModalProps) {
   const [expandedSensor, setExpandedSensor] = useState<string | null>(null);
-
-  const { data: currentReading, isLoading: isReadingLoading } = useCurrentReading(site.site_id);
 
   // État de chaque catégorie déduit de la dernière lecture de notre base
   // (ce qu'etl_worker y écrit chaque minute), pas d'un appel séparé à
   // l'état "en direct" de l'API mock — voir deriveSensorCategoryStatus.
-  const categoryStatus = deriveSensorCategoryStatus(currentReading);
+  const categoryStatus = deriveSensorCategoryStatus(reading ?? null);
   const sensors = Object.entries(categoryStatus);
   // Capteurs en panne d'abord, pour attirer l'œil sur ce qui compte.
   const sortedSensors = [...sensors].sort(([, a], [, b]) => {
@@ -53,7 +36,7 @@ export function SiteSensorsModal({ site, onClose }: SiteSensorsModalProps) {
     return a === "failing" ? -1 : 1;
   });
 
-  const dataQuality = currentReading?.data_quality ?? "good";
+  const dataQuality = reading?.data_quality ?? "good";
   const overallLabel = DATA_QUALITY_LABELS[dataQuality];
   const pillStyle = DATA_QUALITY_PILL_STYLES[dataQuality];
 
@@ -98,9 +81,7 @@ export function SiteSensorsModal({ site, onClose }: SiteSensorsModalProps) {
           État des capteurs · {site.site_name ?? site.site_id}
         </p>
 
-        {isReadingLoading ? (
-          <div className="mt-4 h-40 animate-pulse rounded-xl bg-zinc-50" />
-        ) : !currentReading ? (
+        {!reading ? (
           <p className="mt-4 text-sm text-zinc-500">
             État des capteurs indisponible pour ce site.
           </p>

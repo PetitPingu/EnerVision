@@ -171,6 +171,56 @@ def test_active_alerts_relays_active_alerts_reader(monkeypatch):
     mock_reader.get_active.assert_called_once()
 
 
+def test_latest_readings_relays_latest_readings_reader(monkeypatch):
+    reading = Reading(
+        site_id="SITE001",
+        timestamp="2026-09-22T10:00:00",
+        site_type="office",
+        consumption_kw=120.5,
+        consumption_kwh=120.5,
+        voltage_v=None,
+        current_a=None,
+        power_factor=None,
+        temperature_celsius=21.0,
+        humidity_percent=45.0,
+        null_reasons=["electrical_sensor_failure"],
+        data_quality="degraded",
+    )
+    mock_reader = Mock()
+    mock_reader.get_latest.return_value = [reading]
+    monkeypatch.setattr(api, "latest_readings_reader", mock_reader)
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/readings/latest")
+
+    assert response.status_code == 200
+    assert response.json() == [asdict(reading)]
+    mock_reader.get_latest.assert_called_once()
+
+
+def test_latest_readings_filters_by_site_access(monkeypatch):
+    reading = Reading(site_id="SITE002", timestamp="2026-09-22T10:00:00")
+    mock_reader = Mock()
+    mock_reader.get_latest.return_value = [reading]
+    monkeypatch.setattr(api, "latest_readings_reader", mock_reader)
+    client, _, _ = _client(monkeypatch)
+    monkeypatch.setitem(
+        api.app.dependency_overrides,
+        api.require_auth,
+        lambda: api.CurrentUser(email="viewer@example.com", role="viewer", user_id="u1"),
+    )
+    monkeypatch.setattr(
+        api,
+        "site_access_repository",
+        Mock(get_site_ids=Mock(return_value=["SITE001"])),
+    )
+
+    response = client.get("/api/v1/readings/latest")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_active_alerts_serializes_partial_as_minor_alert_kind(monkeypatch):
     event = AlertEvent(
         event_id="snapshot:SITE005:2026-09-18T08:59:17",

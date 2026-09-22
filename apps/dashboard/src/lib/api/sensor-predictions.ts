@@ -6,8 +6,9 @@ import { apiClient } from "@/lib/api/client";
 import type { SensorStatePrediction, SensorStateRangePrediction } from "@/types/sensors";
 
 /** Relaie GET /api/v1/predictions/sensors (proxy de GET /predict/state du
- * service prediction) — à ne pas confondre avec getSensorsStatus()
- * (lib/api/sensors.ts), qui lit l'état observé en direct. */
+ * service prediction) — à ne pas confondre avec getLatestReadings()
+ * (lib/api/consumption.ts), qui lit l'état observé (déjà survenu), pas
+ * prédit. */
 export async function getSensorStatePrediction(
   siteId: string,
   timestamp: string,
