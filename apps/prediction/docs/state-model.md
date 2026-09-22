@@ -8,6 +8,48 @@ capteur est prédit individuellement : il n'y a pas d'état global du site.
 Voir aussi [ml-pipeline.md](ml-pipeline.md) (modèle
 consommation) et [architecture.md](architecture.md) (arborescence complète).
 
+## Vue d'ensemble (entraînement + inférence)
+
+```mermaid
+flowchart LR
+    subgraph entrainement["Entraînement (cron 24h)"]
+        direction TB
+        PG["PostgreSQL<br/>readings_curated<br/>(1 lecture/minute)"]
+        AGG["aggregate_hourly()<br/>minute → heure, seuil 10%"]
+        TRAIN["train_model()<br/>MultiOutputClassifier"]
+        MLF["MLflow<br/>champion/challenger"]
+        PG --> AGG --> TRAIN --> MLF
+    end
+
+    subgraph inference["Inférence (à la demande)"]
+        direction TB
+        API_P["GET /predict/state"]
+        LOAD["load_latest(sensor-state-model)"]
+        PRED["predict(site_id, heure)<br/>→ 6 états on/off + confiance"]
+        API_P --> LOAD --> PRED
+    end
+
+    subgraph consommateurs["Consommateurs"]
+        direction TB
+        CORE["API Core<br/>/api/v1/predictions/sensors"]
+        DASH["Dashboard<br/>modale Capteurs"]
+        CORE --> DASH
+    end
+
+    MLF -.->|"alias current"| LOAD
+    CORE --> API_P
+    PRED --> CORE
+
+    style entrainement fill:#fff4e6,stroke:#4a5568
+    style inference fill:#eef6ff,stroke:#4a5568
+    style consommateurs fill:#f0fff4,stroke:#4a5568
+```
+
+Deux chemins indépendants qui ne se recoupent qu'au niveau du modèle publié
+dans MLflow : l'entraînement (planifié, lit `readings_curated`) et
+l'inférence (à la demande, charge le dernier modèle promu). Les sections
+suivantes détaillent chaque étape.
+
 ## Ce que le modèle apprend
 
 Chaque ligne de `readings_curated` porte 6 mesures (`consumption_kw`,

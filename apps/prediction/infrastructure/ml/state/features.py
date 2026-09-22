@@ -78,14 +78,9 @@ def build_sensor_targets(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # Part minimale de lectures "off" dans l'heure pour considérer le capteur en
-# panne sur ce bucket horaire. Un ratio, pas un nombre fixe de lectures : le
-# rythme réel des lectures par heure varie (etl_worker toutes les 60s en
-# théorie, observé en pratique entre ~6 et ~40-45 lectures/heure/site selon
-# l'échantillon). À cadence dense (~40-45/h, écart ~87s entre lectures), une
-# coupure réseau réelle de 2-3 lectures consécutives (~4-5 min) ne pèse que
-# ~5-7% de l'heure : un seuil à 30% la classerait "on" à tort. 10% capte ces
-# pannes courtes tout en restant au-dessus du bruit d'une lecture isolée
-# (à cadence dense, ~2,5% de l'heure).
+# panne sur ce bucket horaire (ratio, pas un nombre fixe : le rythme réel
+# des lectures varie selon la source). Calcul détaillé et calibrage sur un
+# échantillon réel : docs/state-model.md, section "Limites connues".
 MIN_OFF_RATIO_PER_HOUR = 0.1
 
 
@@ -96,16 +91,8 @@ def aggregate_hourly(
     """Agrège les lectures minute par minute en buckets horaires
     (site_id, heure) : un capteur est "off" pour cette heure si la part de
     lectures de l'heure qui l'ont vu off atteint `min_off_ratio`, "on" sinon.
-
-    À l'échelle de la lecture individuelle, chaque panne est un événement
-    quasi unique (une seule ligne par site et par instant dans tout
-    l'historique) : le modèle ne peut apprendre aucun motif réel, seulement
-    du bruit. À l'échelle de l'heure, la même panne devient un exemple que
-    d'autres heures peuvent effectivement recouper - et c'est aussi le
-    grain que /predict/state/range expose déjà (un point par heure). Un
-    ratio (pas un nombre absolu de lectures) écarte les anomalies isolées
-    sans dépendre du nombre exact de lectures reçues dans l'heure. Voir
-    docs/state-model.md, section Limites.
+    C'est aussi le grain que /predict/state/range expose (un point par
+    heure). Voir docs/state-model.md, section "Agrégation horaire".
     """
     missing = set(RAW_COLUMNS) - set(df.columns)
     if missing:
