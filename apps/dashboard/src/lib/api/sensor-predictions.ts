@@ -1,25 +1,6 @@
-import {
-  PREDICTIONS_SENSORS_ENDPOINT,
-  PREDICTIONS_SENSORS_RANGE_ENDPOINT,
-} from "@/config/api";
+import { PREDICTIONS_SENSORS_RANGE_ENDPOINT } from "@/config/api";
 import { apiClient } from "@/lib/api/client";
-import type { SensorStatePrediction, SensorStateRangePrediction } from "@/types/sensors";
-
-/** Relaie GET /api/v1/predictions/sensors (proxy de GET /predict/state du
- * service prediction) — à ne pas confondre avec getLatestReadings()
- * (lib/api/consumption.ts), qui lit l'état observé (déjà survenu), pas
- * prédit. */
-export async function getSensorStatePrediction(
-  siteId: string,
-  timestamp: string,
-): Promise<SensorStatePrediction> {
-  const { data } = await apiClient.get<SensorStatePrediction>(
-    PREDICTIONS_SENSORS_ENDPOINT,
-    { params: { site_id: siteId, timestamp } },
-  );
-
-  return data;
-}
+import type { SensorStateRangePrediction } from "@/types/sensors";
 
 /** Relaie GET /api/v1/predictions/sensors/range : un point par heure, de
  * startTime + 1h à startTime + hours. */
