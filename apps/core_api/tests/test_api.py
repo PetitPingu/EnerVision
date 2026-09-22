@@ -222,6 +222,86 @@ def test_recommendations_requires_site_id(monkeypatch):
     assert response.status_code == 422
 
 
+def test_drift_returns_stable_status_below_moderate_threshold(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+    mock_model_health_api = Mock()
+    mock_model_health_api.get_drift_score.return_value = 0.5
+    mock_model_health_api.get_mae_24h.return_value = 12.5
+    mock_model_health_api.get_mae_7d.return_value = 20.0
+    mock_model_health_api.get_mae_by_horizon.return_value = {"0-1h": 5.0}
+    monkeypatch.setattr(api, "model_health_api", mock_model_health_api)
+
+    response = client.get("/api/v1/model-health/drift", params={"site_id": "SITE001"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "site_id": "SITE001",
+        "drift_score": 0.5,
+        "status": "stable",
+        "mae_24h_kwh": 12.5,
+        "mae_7d_kwh": 20.0,
+        "mae_by_horizon": {"0-1h": 5.0},
+    }
+
+
+def test_drift_returns_moderate_status_between_thresholds(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+    mock_model_health_api = Mock()
+    mock_model_health_api.get_drift_score.return_value = 1.5
+    mock_model_health_api.get_mae_24h.return_value = 12.5
+    mock_model_health_api.get_mae_7d.return_value = 20.0
+    mock_model_health_api.get_mae_by_horizon.return_value = {}
+    monkeypatch.setattr(api, "model_health_api", mock_model_health_api)
+
+    response = client.get("/api/v1/model-health/drift", params={"site_id": "SITE001"})
+
+    assert response.json()["status"] == "moderate"
+
+
+def test_drift_returns_critical_status_above_critical_threshold(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+    mock_model_health_api = Mock()
+    mock_model_health_api.get_drift_score.return_value = 2.1
+    mock_model_health_api.get_mae_24h.return_value = 12.5
+    mock_model_health_api.get_mae_7d.return_value = 20.0
+    mock_model_health_api.get_mae_by_horizon.return_value = {}
+    monkeypatch.setattr(api, "model_health_api", mock_model_health_api)
+
+    response = client.get("/api/v1/model-health/drift", params={"site_id": "SITE001"})
+
+    assert response.json()["status"] == "critical"
+
+
+def test_drift_returns_unknown_status_without_502_when_score_is_missing(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+    mock_model_health_api = Mock()
+    mock_model_health_api.get_drift_score.return_value = None
+    mock_model_health_api.get_mae_24h.return_value = None
+    mock_model_health_api.get_mae_7d.return_value = None
+    mock_model_health_api.get_mae_by_horizon.return_value = {}
+    monkeypatch.setattr(api, "model_health_api", mock_model_health_api)
+
+    response = client.get("/api/v1/model-health/drift", params={"site_id": "SITE001"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "site_id": "SITE001",
+        "drift_score": None,
+        "status": "unknown",
+        "mae_24h_kwh": None,
+        "mae_7d_kwh": None,
+        "mae_by_horizon": {},
+    }
+
+
+def test_drift_requires_site_id(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/model-health/drift")
+
+    assert response.status_code == 422
+
+
 @pytest.mark.asyncio
 async def test_sse_alert_events_yields_formatted_events_then_stops():
     event = AlertEvent(

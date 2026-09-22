@@ -1,31 +1,57 @@
+"use client";
+
+import { usePredictionAccuracy } from "@/hooks/prediction/usePredictionAccuracy";
+import type { ComparisonPeriod } from "@/types/prediction";
+
+type PredictionKpiRowProps = {
+  siteId: string;
+  period: ComparisonPeriod;
+};
+
 type Kpi = {
   label: string;
   value: string;
   hint: string;
-  hintClassName?: string;
 };
 
-// Valeurs mockées : le calcul réel (MAE, précision du modèle) n'est pas
-// dans le périmètre du ticket #92, qui ne porte que sur le graphique.
-const KPIS: Kpi[] = [
-  { label: "Écart moyen (MAE)", value: "4,8 kW", hint: "Sur la période affichée" },
-  {
-    label: "Erreur moyenne",
-    value: "3,1%",
-    hint: "-0,4 pt vs semaine dernière",
-    hintClassName: "text-green-600",
-  },
-  {
-    label: "Précision du modèle",
-    value: "94%",
-    hint: "Horizon maximum : 7 jours",
-  },
-];
+const PERIOD_LABEL: Record<ComparisonPeriod, string> = {
+  "24h": "les dernières 24h",
+  "7d": "les 7 derniers jours",
+};
 
-export function PredictionKpiRow() {
+function formatKw(value: number): string {
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} kW`;
+}
+
+function formatPercent(value: number): string {
+  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}%`;
+}
+
+export function PredictionKpiRow({ siteId, period }: PredictionKpiRowProps) {
+  const { maeKw, errorPct, accuracyPct } = usePredictionAccuracy(siteId, period);
+  const periodLabel = PERIOD_LABEL[period];
+
+  const kpis: Kpi[] = [
+    {
+      label: "Écart moyen (MAE)",
+      value: maeKw !== null ? formatKw(maeKw) : "—",
+      hint: `MAE glissante sur ${periodLabel}`,
+    },
+    {
+      label: "Erreur moyenne",
+      value: errorPct !== null ? formatPercent(errorPct) : "—",
+      hint: `MAE / consommation moyenne (${period === "24h" ? "24h" : "7j"})`,
+    },
+    {
+      label: "Précision du modèle",
+      value: accuracyPct !== null ? formatPercent(accuracyPct) : "—",
+      hint: "Horizon maximum : 7 jours",
+    },
+  ];
+
   return (
     <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-      {KPIS.map((kpi) => (
+      {kpis.map((kpi) => (
         <div
           key={kpi.label}
           className="rounded-2xl bg-white p-5 shadow-sm"
@@ -35,9 +61,7 @@ export function PredictionKpiRow() {
           <p className="text-2xl font-bold tracking-tight text-zinc-900">
             {kpi.value}
           </p>
-          <p className={`mt-1.5 text-xs ${kpi.hintClassName ?? "text-zinc-400"}`}>
-            {kpi.hint}
-          </p>
+          <p className="mt-1.5 text-xs text-zinc-400">{kpi.hint}</p>
         </div>
       ))}
     </div>

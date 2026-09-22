@@ -8,9 +8,7 @@ package partagé indépendant de toute app, installable par `core_api`,
 plus simple à corréler directement avec les payloads de l'API et les
 objets MinIO sans jointure supplémentaire. `USERS` est désormais
 implémentée (voir `packages/db-schema/alembic/versions/c54505b1fc62_create_users_table.py`).
-`PREDICTIONS` reste une proposition non implémentée, à confirmer avec
-l'équipe.
-`RECOMMENDATIONS` est implémentée (voir plus bas).
+`PREDICTIONS_LOG` et `RECOMMENDATIONS` sont implémentées (voir plus bas).
 
 SITES — les entités métier de base, telles que renvoyées par l'API mock : nom, type, capacité, localisation, statut.
 
@@ -18,9 +16,9 @@ READINGS_CURATED — table alimentée par le Worker ETL (voir [seq_etl.md](seq_e
 
 ALERTS — table créée par la migration (schéma prévu pour les alertes de consommation), mais **non alimentée à ce jour** : `core_api` relaie bien les alertes de l'API mock sur `GET /api/v1/alerts`, mais en pur proxy HTTP (aucune écriture Postgres). La détection d'alerte "data_quality dégradée/critique" en cours de conception passera par Redis Streams (`alert.detected`, voir la section Stockage ci-dessus), pas par cette table.
 
-PREDICTIONS *(proposé)* — écrites par le worker/service Prediction toutes les 24h, avec model_version pour pouvoir tracer quelle version du modèle a produit quelle prédiction si vous voulez comparer plus tard.
+PREDICTIONS_LOG — implémentée sous le nom `predictions_log` (voir [monitoring_model.md](monitoring_model.md)) : une ligne par appel à `/predict` (service Prediction), avec `model_version` pour tracer quelle version du modèle a produit quelle prédiction. Sert de base au job de rapprochement de l'ETL worker (MAE glissante 24h + drift). Pas de FK vers SITES (même convention que READINGS_CURATED).
 
-RECOMMENDATIONS — générée et persistée par le service Recommendation (`GET /api/v1/recommendations?site_id=...`) : récupère la prédiction courante du site (appel HTTP au service Prediction), la capacité du site et son dernier facteur de puissance connu (`readings_curated`), applique le moteur de règles à seuils (décalage de charge, report de pic, compensation d'énergie réactive) et persiste chaque recommandation déclenchée. `model_version` et `estimated_gain_kwh` tracent respectivement la version du modèle ayant produit la prédiction source et le gain estimé (kWh) de la recommandation. `prediction_id` reste nullable et sans clé étrangère (la table `PREDICTIONS` n'existe pas encore) : une recommandation peut aussi naître d'un état courant critique sans passer par une prédiction persistée (ex. data_quality: critical détecté en direct) — pas seulement d'un pic anticipé.
+RECOMMENDATIONS — générée et persistée par le service Recommendation (`GET /api/v1/recommendations?site_id=...`) : récupère la prédiction courante du site (appel HTTP au service Prediction), la capacité du site et son dernier facteur de puissance connu (`readings_curated`), applique le moteur de règles à seuils (décalage de charge, report de pic, compensation d'énergie réactive) et persiste chaque recommandation déclenchée. `model_version` et `estimated_gain_kwh` tracent respectivement la version du modèle ayant produit la prédiction source et le gain estimé (kWh) de la recommandation. `prediction_id` reste nullable et sans clé étrangère réelle vers `PREDICTIONS_LOG` : une recommandation peut aussi naître d'un état courant critique sans passer par une prédiction persistée (ex. data_quality: critical détecté en direct) — pas seulement d'un pic anticipé.
 
 USERS — table d'authentification, volontairement isolée du reste : email (unique), password_hash (jamais le mot de passe en clair, bcrypt/argon2 côté FastAPI), role (ex. admin/viewer). Elle ne référence aucune autre table.
 
@@ -74,19 +72,19 @@ erDiagram
         float threshold
     }
 
-    PREDICTIONS {
+    PREDICTIONS_LOG {
         uuid id PK
-        varchar site_id FK
+        varchar site_id "pas de FK vers SITES"
         timestamptz target_timestamp
-        float predicted_consumption_kw
-        varchar model_version "version du Model Registry MLflow"
+        float predicted_consumption_kwh
+        varchar model_version "nullable, = metadata.trained_at"
         timestamptz generated_at
     }
 
     RECOMMENDATIONS {
         uuid id PK
         varchar site_id FK
-        uuid prediction_id "nullable, pas de FK (table PREDICTIONS non implementee)"
+        uuid prediction_id "nullable, pas de FK reelle vers PREDICTIONS_LOG"
         varchar type "load_shifting | peak_shift | power_factor_compensation"
         text message
         varchar model_version "nullable"
@@ -96,7 +94,7 @@ erDiagram
 
     SITES ||--o{ READINGS_CURATED : "mesure"
     SITES ||--o{ ALERTS : "concerne"
-    SITES ||--o{ PREDICTIONS : "anticipe"
+    SITES ||--o{ PREDICTIONS_LOG : "anticipe"
     SITES ||--o{ RECOMMENDATIONS : "recoit"
-    PREDICTIONS |o--o| RECOMMENDATIONS : "declenche"
+    PREDICTIONS_LOG |o--o| RECOMMENDATIONS : "declenche"
 ```

@@ -34,3 +34,19 @@ class Config:
     # docker-compose (nom du service), "localhost" en dev hors compose.
     REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
     REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+
+    # Monitoring du modèle (docs/monitoring_model.md) : rapprochement MAE
+    # 24h + drift, moins fréquent que le job ETL principal.
+    MODEL_HEALTH_INTERVAL_SECONDS = int(
+        os.environ.get("MODEL_HEALTH_INTERVAL_SECONDS", str(60 * 60))
+    )
+    # Fenêtre (en jours) avant metadata.trained_at utilisée comme référence
+    # "entraînement" pour le calcul de drift - cohérent avec l'historique
+    # court (~10 jours) mentionné dans features.py côté apps/prediction.
+    TRAINING_WINDOW_DAYS = int(os.environ.get("TRAINING_WINDOW_DAYS", "10"))
+    METRICS_PORT = int(os.environ.get("ETL_METRICS_PORT", "9200"))
+    # Historique regardé pour construire le profil d'erreur par horizon
+    # (domain/model_health.py:compute_mae_by_horizon, tranches jusqu'à 7j) :
+    # plus large que TRAINING_WINDOW_DAYS pour avoir assez de prédictions
+    # rapprochées sur les tranches d'horizon longues.
+    HORIZON_PROFILE_LOOKBACK_DAYS = int(os.environ.get("HORIZON_PROFILE_LOOKBACK_DAYS", "30"))

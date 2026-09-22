@@ -44,6 +44,11 @@ def test_predict_returns_prediction(monkeypatch):
         )
 
     monkeypatch.setattr("presentation.api.run_predict", fake_predict)
+    logged_calls = []
+    monkeypatch.setattr(
+        "presentation.api.PredictionLogWriter",
+        lambda: _FakePredictionLogWriter(logged_calls),
+    )
 
     client = TestClient(app)
     response = client.get(
@@ -58,6 +63,53 @@ def test_predict_returns_prediction(monkeypatch):
         "predicted_consumption_kwh": 123.45,
         "model_version": "2026-09-16T14-30-00Z",
     }
+    assert logged_calls == [
+        {
+            "site_id": "SITE001",
+            "target_timestamp": target,
+            "predicted_consumption_kwh": 123.45,
+            "model_version": "2026-09-16T14-30-00Z",
+        }
+    ]
+
+
+def test_predict_succeeds_even_if_predictions_log_write_fails(monkeypatch):
+    target = datetime(2026, 9, 17, 14, 30, tzinfo=timezone.utc)
+
+    def fake_predict(**_kwargs):
+        return PredictionResult(
+            site_id="SITE001",
+            target_timestamp=target,
+            predicted_consumption_kwh=123.45,
+            model_version="2026-09-16T14-30-00Z",
+        )
+
+    monkeypatch.setattr("presentation.api.run_predict", fake_predict)
+
+    class _BrokenWriter:
+        def log(self, **_kwargs):
+            raise RuntimeError("Postgres indisponible")
+
+    monkeypatch.setattr("presentation.api.PredictionLogWriter", _BrokenWriter)
+
+    client = TestClient(app)
+    response = client.get(
+        "/predict",
+        params={"site_id": "SITE001", "timestamp": "2026-09-17T14:30:00Z"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["predicted_consumption_kwh"] == 123.45
+
+
+class _FakePredictionLogWriter:
+    """Capture les appels à .log() sans toucher Postgres."""
+
+    def __init__(self, calls: list):
+        self._calls = calls
+
+    def log(self, **kwargs):
+        self._calls.append(kwargs)
 
 
 def test_predict_returns_503_when_model_not_loaded(monkeypatch):

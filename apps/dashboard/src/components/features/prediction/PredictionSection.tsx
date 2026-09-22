@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
+import { DriftBadge } from "@/components/features/prediction/DriftBadge";
 import { PredictionComparisonChart } from "@/components/features/prediction/PredictionComparisonChart";
 import { usePredictionComparison } from "@/hooks/prediction/usePredictionComparison";
+import { useModelDrift } from "@/hooks/prediction/useModelDrift";
 import type { ComparisonPeriod } from "@/types/prediction";
 
 type PredictionSectionProps = {
   siteId: string;
+  period: ComparisonPeriod;
+  onPeriodChange: (period: ComparisonPeriod) => void;
 };
 
 const PERIOD_OPTIONS: { value: ComparisonPeriod; label: string }[] = [
@@ -42,12 +45,16 @@ function PeriodToggle({
   );
 }
 
-export function PredictionSection({ siteId }: PredictionSectionProps) {
-  const [period, setPeriod] = useState<ComparisonPeriod>("24h");
+export function PredictionSection({
+  siteId,
+  period,
+  onPeriodChange,
+}: PredictionSectionProps) {
   const { data, nowBucket, isLoading, error } = usePredictionComparison(
     siteId,
     period,
   );
+  const drift = useModelDrift(siteId);
 
   return (
     <div
@@ -56,14 +63,17 @@ export function PredictionSection({ siteId }: PredictionSectionProps) {
     >
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-zinc-900">
-            Consommation prévue vs réelle
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-zinc-900">
+              Consommation prévue vs réelle
+            </h2>
+            <DriftBadge drift={drift} />
+          </div>
           <p className="mt-1 text-sm text-zinc-500">
             Historique mesuré et projection du modèle, sur le même graphique.
           </p>
         </div>
-        <PeriodToggle value={period} onChange={setPeriod} />
+        <PeriodToggle value={period} onChange={onPeriodChange} />
       </div>
 
       {isLoading ? (
@@ -75,7 +85,12 @@ export function PredictionSection({ siteId }: PredictionSectionProps) {
       ) : data.length === 0 ? (
         <EmptyState message="Pas de donnée" />
       ) : (
-        <PredictionComparisonChart data={data} nowBucket={nowBucket} />
+        <PredictionComparisonChart
+          data={data}
+          nowBucket={nowBucket}
+          maeByHorizon={drift?.mae_by_horizon ?? {}}
+          fallbackMae={(period === "24h" ? drift?.mae_24h_kwh : drift?.mae_7d_kwh) ?? null}
+        />
       )}
     </div>
   );

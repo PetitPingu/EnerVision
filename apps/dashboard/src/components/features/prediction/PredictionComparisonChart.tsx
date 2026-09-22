@@ -12,12 +12,28 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { maeForHorizon } from "@/lib/model-health/horizonBuckets";
 import type { ComparisonPoint } from "@/hooks/prediction/usePredictionComparison";
+
+type ChartPoint = ComparisonPoint & {
+  /** [borne basse, borne haute] = predicted_kw ± MAE de la tranche d'horizon, ou null hors prévision. */
+  predicted_range: [number, number] | null;
+};
 
 type PredictionComparisonChartProps = {
   data: ComparisonPoint[];
   /** Bucket (clé ISO unique) du point de jonction — voir usePredictionComparison. */
   nowBucket: string | null;
+  /**
+   * MAE historique par tranche d'horizon (ex. "0-1h" -> 5.2), voir
+   * useModelDrift. Fait grandir la marge d'erreur affichée autour de la
+   * prévision avec l'horizon plutôt qu'une largeur constante — pas un
+   * intervalle de confiance statistique, juste "à quel point le modèle
+   * s'est trompé sur des prédictions à cet horizon" (docs/monitoring_model.md).
+   */
+  maeByHorizon: Record<string, number>;
+  /** MAE glissante 24h : repli si la tranche d'horizon du point est absente. */
+  fallbackMae: number | null;
 };
 
 function formatKw(value: number): string {
@@ -29,7 +45,7 @@ function ChartTooltip({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: ComparisonPoint }>;
+  payload?: Array<{ payload: ChartPoint }>;
 }) {
   if (!active || !payload?.length) {
     return null;
@@ -47,6 +63,12 @@ function ChartTooltip({
         Prévue :{" "}
         {point.predicted_kw !== null ? formatKw(point.predicted_kw) : "—"}
       </p>
+      {point.predicted_range && (
+        <p className="text-zinc-400">
+          Marge d&apos;erreur : {formatKw(point.predicted_range[0])} –{" "}
+          {formatKw(point.predicted_range[1])}
+        </p>
+      )}
     </div>
   );
 }
@@ -54,7 +76,28 @@ function ChartTooltip({
 export function PredictionComparisonChart({
   data,
   nowBucket,
+  maeByHorizon,
+  fallbackMae,
 }: PredictionComparisonChartProps) {
+  const hasErrorMargin = fallbackMae !== null || Object.keys(maeByHorizon).length > 0;
+
+  const chartData = useMemo<ChartPoint[]>(
+    () =>
+      data.map((point) => {
+        if (point.predicted_kw === null) {
+          return { ...point, predicted_range: null };
+        }
+        const mae = nowBucket
+          ? maeForHorizon(point.bucket, nowBucket, maeByHorizon, fallbackMae)
+          : fallbackMae;
+        return {
+          ...point,
+          predicted_range:
+            mae !== null ? [point.predicted_kw - mae, point.predicted_kw + mae] : null,
+        };
+      }),
+    [data, nowBucket, maeByHorizon, fallbackMae],
+  );
   // Le libellé affiché ("14:00", "17/09 06h"...) peut être partagé par deux
   // buckets distincts (ex. début et fin d'une fenêtre 24h) : on affiche
   // toujours ce texte sur les ticks, mais on utilise le bucket (clé ISO
@@ -70,7 +113,7 @@ export function PredictionComparisonChart({
       <div className="h-[440px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
-            data={data}
+            data={chartData}
             margin={{ top: 28, right: 16, left: 0, bottom: 0 }}
           >
             <defs>
@@ -120,6 +163,19 @@ export function PredictionComparisonChart({
               connectNulls={false}
               isAnimationActive={false}
             />
+
+            {hasErrorMargin && (
+              <Area
+                type="monotone"
+                dataKey="predicted_range"
+                name="Marge d'erreur historique"
+                stroke="none"
+                fill="var(--chart-primary)"
+                fillOpacity={0.12}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            )}
 
             <Line
               type="monotone"
@@ -180,6 +236,15 @@ export function PredictionComparisonChart({
           </svg>
           Prévision du modèle
         </div>
+        {hasErrorMargin && (
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-600">
+            <span
+              className="h-2.5 w-6 rounded-sm"
+              style={{ backgroundColor: "var(--chart-primary)", opacity: 0.12 }}
+            />
+            Marge d&apos;erreur historique
+          </div>
+        )}
       </div>
     </div>
   );
