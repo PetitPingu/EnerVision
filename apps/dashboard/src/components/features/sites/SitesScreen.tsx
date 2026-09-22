@@ -1,7 +1,7 @@
 "use client";
 
 import { EmptyState } from "@/components/EmptyState";
-import { computeSeverity, SiteCard } from "@/components/features/sites/SiteCard";
+import { SiteCard } from "@/components/features/sites/SiteCard";
 import { SitesSummaryCards } from "@/components/features/sites/SitesSummaryCards";
 import { useSiteSelection } from "@/contexts/SiteSelectionContext";
 import { useSensorsStatus } from "@/hooks/sites/useSensorsStatus";
@@ -24,19 +24,20 @@ export function SitesScreen() {
 
   const isLoading = isSitesLoading || isStatusLoading;
 
-  let partielCount = 0;
-  let degradeCount = 0;
-  let critiqueCount = 0;
+  // Total on/off des capteurs, tous sites confondus (pas un mélange de
+  // compteurs de nature différente : capteurs vs sites, voir historique).
+  let sensorsOnCount = 0;
+  let sensorsOffCount = 0;
 
   for (const site of sites) {
-    const severity = computeSeverity(sensorsStatus[site.site_id]);
-    const failingSensors = Object.values(
-      sensorsStatus[site.site_id]?.sensors ?? {},
-    ).filter((sensor) => sensor.status === "failing").length;
-
-    partielCount += failingSensors;
-    if (severity.degrade) degradeCount += 1;
-    if (severity.critique) critiqueCount += 1;
+    const sensors = Object.values(sensorsStatus[site.site_id]?.sensors ?? {});
+    for (const sensor of sensors) {
+      if (sensor.status === "failing") {
+        sensorsOffCount += 1;
+      } else {
+        sensorsOnCount += 1;
+      }
+    }
   }
 
   return (
@@ -64,9 +65,8 @@ export function SitesScreen() {
       ) : (
         <SitesSummaryCards
           sitesCount={sites.length}
-          partielCount={partielCount}
-          degradeCount={degradeCount}
-          critiqueCount={critiqueCount}
+          sensorsOnCount={sensorsOnCount}
+          sensorsOffCount={sensorsOffCount}
         />
       )}
 

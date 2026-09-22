@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { SensorForecastTimeline } from "@/components/features/sites/SensorForecastTimeline";
+import { useCurrentReading } from "@/hooks/sites/useCurrentReading";
+import { deriveSensorCategoryStatus } from "@/lib/format/sensorCategory";
+import type { DataQuality } from "@/types/consumption";
 import type { Site } from "@/types/site";
-import type { SiteSensorStatus } from "@/types/sensorStatus";
 
 const SENSOR_LABELS: Record<string, string> = {
   consumption: "Consommation",
@@ -13,44 +15,47 @@ const SENSOR_LABELS: Record<string, string> = {
   network: "Réseau",
 };
 
-const OVERALL_LABELS: Record<string, string> = {
-  ok: "normal",
+// data_quality de la dernière lecture (readings_curated), pas une sévérité
+// recalculée côté front à partir des capteurs en panne — voir
+// useCurrentReading / GET /api/v1/sites/{site_id}/current.
+const DATA_QUALITY_LABELS: Record<DataQuality, string> = {
+  good: "normal",
+  partial: "partiel",
   degraded: "dégradé",
   critical: "critique",
 };
 
-const OVERALL_PILL_STYLES: Record<string, string> = {
-  ok: "border-blue-200 text-blue-700",
-  degraded: "border-amber-200 text-amber-700",
+const DATA_QUALITY_PILL_STYLES: Record<DataQuality, string> = {
+  good: "border-blue-200 text-blue-700",
+  partial: "border-amber-200 text-amber-700",
+  degraded: "border-orange-200 text-orange-700",
   critical: "border-red-200 text-red-700",
 };
 
-function formatTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 type SiteSensorsModalProps = {
   site: Site;
-  status: SiteSensorStatus | undefined;
   onClose: () => void;
 };
 
-export function SiteSensorsModal({ site, status, onClose }: SiteSensorsModalProps) {
+export function SiteSensorsModal({ site, onClose }: SiteSensorsModalProps) {
   const [expandedSensor, setExpandedSensor] = useState<string | null>(null);
 
-  const sensors = status ? Object.entries(status.sensors) : [];
+  const { data: currentReading, isLoading: isReadingLoading } = useCurrentReading(site.site_id);
+
+  // État de chaque catégorie déduit de la dernière lecture de notre base
+  // (ce qu'etl_worker y écrit chaque minute), pas d'un appel séparé à
+  // l'état "en direct" de l'API mock — voir deriveSensorCategoryStatus.
+  const categoryStatus = deriveSensorCategoryStatus(currentReading);
+  const sensors = Object.entries(categoryStatus);
   // Capteurs en panne d'abord, pour attirer l'œil sur ce qui compte.
   const sortedSensors = [...sensors].sort(([, a], [, b]) => {
-    if (a.status === b.status) return 0;
-    return a.status === "failing" ? -1 : 1;
+    if (a === b) return 0;
+    return a === "failing" ? -1 : 1;
   });
 
-  const overall = status?.overall ?? "ok";
-  const overallLabel = OVERALL_LABELS[overall] ?? overall;
-  const pillStyle = OVERALL_PILL_STYLES[overall] ?? "border-zinc-200 text-zinc-700";
+  const dataQuality = currentReading?.data_quality ?? "good";
+  const overallLabel = DATA_QUALITY_LABELS[dataQuality];
+  const pillStyle = DATA_QUALITY_PILL_STYLES[dataQuality];
 
   function togglePrediction(sensorName: string) {
     setExpandedSensor((current) => (current === sensorName ? null : sensorName));
@@ -93,15 +98,17 @@ export function SiteSensorsModal({ site, status, onClose }: SiteSensorsModalProp
           État des capteurs · {site.site_name ?? site.site_id}
         </p>
 
-        {!status ? (
+        {isReadingLoading ? (
+          <div className="mt-4 h-40 animate-pulse rounded-xl bg-zinc-50" />
+        ) : !currentReading ? (
           <p className="mt-4 text-sm text-zinc-500">
             État des capteurs indisponible pour ce site.
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-zinc-100 rounded-xl border border-zinc-100">
-            {sortedSensors.map(([name, sensor]) => {
+            {sortedSensors.map(([name, sensorStatus]) => {
               const sensorLabel = SENSOR_LABELS[name] ?? name;
-              const isFailing = sensor.status === "failing";
+              const isFailing = sensorStatus === "failing";
 
               return (
                 <li key={name} className="px-3 py-2.5">
@@ -109,18 +116,14 @@ export function SiteSensorsModal({ site, status, onClose }: SiteSensorsModalProp
                     <div className="flex items-center gap-2">
                       <span
                         className={`h-2 w-2 shrink-0 rounded-full ${
-                          isFailing ? "bg-blue-500" : "bg-emerald-500"
+                          isFailing ? "bg-red-500" : "bg-emerald-500"
                         }`}
                         aria-hidden="true"
                       />
                       <span className="text-sm text-zinc-700">Capteur {sensorLabel}</span>
                     </div>
                     <span className="text-xs text-zinc-400">
-                      {isFailing && sensor.failing_until
-                        ? `Retour estimé ${formatTime(sensor.failing_until)}`
-                        : isFailing
-                          ? "En panne"
-                          : "OK"}
+                      {isFailing ? "En panne" : "OK"}
                     </span>
                   </div>
 

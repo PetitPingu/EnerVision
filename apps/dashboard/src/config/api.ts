@@ -2,6 +2,10 @@ export const LOGIN_ENDPOINT = "/auth/login";
 
 export const SITES_ENDPOINT = "/api/v1/sites";
 
+export function siteCurrentReadingEndpoint(siteId: string): string {
+  return `/api/v1/sites/${siteId}/current`;
+}
+
 export const READINGS_ENDPOINT = "/api/v1/readings";
 
 /** Limite max supportée par core-api (cf. `list_readings`). */

@@ -6,43 +6,43 @@ import { SITE_TYPE_LABELS } from "@/lib/format/site";
 import type { Site } from "@/types/site";
 import type { SiteSensorStatus } from "@/types/sensorStatus";
 
-type SeverityFlags = {
+export type SeverityFlags = {
+  /** Au moins un capteur en panne, mais pas tous. */
   partiel: boolean;
-  degrade: boolean;
+  /** Tous les capteurs du site sont en panne. */
   critique: boolean;
 };
 
 /**
- * Un capteur en panne compte pour "partiel" ; overall (calculé par l'API
- * mock à partir des capteurs en panne du site — "critical" dès que le
- * capteur "network" est en panne, "degraded" sinon) donne le badge
- * dégradé/critique. Un site peut donc afficher jusqu'à 2 pastilles.
+ * Sévérité dérivée directement du nombre de capteurs en panne — pas du
+ * champ "overall" de l'API mock (règle propre au capteur "network",
+ * "critical" dès qu'il tombe même si les autres capteurs vont bien) : on
+ * veut "critique" seulement quand TOUT le site est en panne, cohérent
+ * entre les pastilles de la liste et la modale (voir SiteSensorsModal).
  */
 export function computeSeverity(status: SiteSensorStatus | undefined): SeverityFlags {
-  if (!status) {
-    return { partiel: false, degrade: false, critique: false };
+  const sensors = status ? Object.values(status.sensors) : [];
+  if (sensors.length === 0) {
+    return { partiel: false, critique: false };
   }
 
-  const hasFailingSensor = Object.values(status.sensors).some(
-    (sensor) => sensor.status === "failing",
-  );
+  const failingCount = sensors.filter((sensor) => sensor.status === "failing").length;
+  if (failingCount === 0) {
+    return { partiel: false, critique: false };
+  }
 
-  return {
-    partiel: hasFailingSensor,
-    degrade: status.overall === "degraded",
-    critique: status.overall === "critical",
-  };
+  const allFailing = failingCount === sensors.length;
+  return { partiel: !allFailing, critique: allFailing };
 }
 
 function SeverityDots({ severity }: { severity: SeverityFlags }) {
-  if (!severity.partiel && !severity.degrade && !severity.critique) {
+  if (!severity.partiel && !severity.critique) {
     return null;
   }
 
   return (
     <div className="flex shrink-0 items-center gap-1" aria-hidden="true">
-      {severity.partiel && <span className="h-2 w-2 rounded-full bg-blue-500" />}
-      {severity.degrade && <span className="h-2 w-2 rounded-full bg-amber-500" />}
+      {severity.partiel && <span className="h-2 w-2 rounded-full bg-amber-500" />}
       {severity.critique && <span className="h-2 w-2 rounded-full bg-red-500" />}
     </div>
   );
@@ -98,7 +98,7 @@ export const SiteCard = memo(function SiteCard({ site, status }: SiteCardProps) 
       </button>
 
       {isModalOpen && (
-        <SiteSensorsModal site={site} status={status} onClose={() => setIsModalOpen(false)} />
+        <SiteSensorsModal site={site} onClose={() => setIsModalOpen(false)} />
       )}
     </div>
   );
