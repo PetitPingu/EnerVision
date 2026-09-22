@@ -221,6 +221,29 @@ services:
     networks:
       - enervision-net
 
+  # Migration Alembic exécutée une seule fois : core_api ET recommendation
+  # lancent chacun "alembic upgrade head" au démarrage de leur conteneur
+  # (voir apps/core_api/Dockerfile, apps/recommendation/Dockerfile). Sur une
+  # base fraîche, les deux CREATE TABLE alembic_version concurrents entrent
+  # en course et l'un des deux plante avec UniqueViolation sur
+  # pg_type_typname_nsp_index — "service_started" (contrairement à
+  # service_completed_successfully) n'attend que le lancement du process,
+  # pas la fin de sa propre migration. Ce service dédié applique les
+  # migrations avant que core_api/recommendation ne démarrent ; leur propre
+  # "alembic upgrade head" devient alors un no-op sûr (déjà à head).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/core_api/Dockerfile
+    command: ["alembic", "-c", "/packages/db-schema/alembic.ini", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
   core_api:
     build:
       # Contexte élargi à la racine du repo pour pouvoir copier packages/
@@ -241,6 +264,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       prediction:
         condition: service_started
       recommendation:
@@ -313,6 +338,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       prediction:
         condition: service_started
     networks:

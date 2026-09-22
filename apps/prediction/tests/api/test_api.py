@@ -190,7 +190,7 @@ def test_predict_state_returns_prediction(monkeypatch):
         return StatePredictionResult(
             site_id="SITE001",
             target_timestamp=target,
-            predicted_state="good",
+            sensors={"voltage_v": "on", "humidity_percent": "off"},
             model_version="2026-09-16T14-30-00Z",
         )
 
@@ -206,7 +206,7 @@ def test_predict_state_returns_prediction(monkeypatch):
     assert response.json() == {
         "site_id": "SITE001",
         "target_timestamp": "2026-09-17T14:30:00Z",
-        "predicted_state": "good",
+        "sensors": {"voltage_v": "on", "humidity_percent": "off"},
         "model_version": "2026-09-16T14-30-00Z",
     }
 

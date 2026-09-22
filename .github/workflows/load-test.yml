@@ -1,0 +1,105 @@
+name: Load Test (Locust)
+
+# Test de charge, pas un test de non-régression : coûteux (build de toute la
+# stack) et bruyant sur des runners GitHub-hosted à charge variable. Déclenché
+# à la demande (avant une démo/soutenance ou un déploiement) et en nightly
+# pour repérer une dérive de perf dans le temps, jamais sur chaque push/PR
+# comme prediction-tests.yml ou dashboard-e2e.yml. Voir docs/load-testing.md.
+on:
+  workflow_dispatch:
+    inputs:
+      users:
+        description: "Nombre d'utilisateurs virtuels simultanés"
+        default: "20"
+      spawn-rate:
+        description: "Utilisateurs virtuels démarrés par seconde"
+        default: "5"
+      run-time:
+        description: "Durée du run (ex: 2m, 90s)"
+        default: "2m"
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC chaque nuit
+
+env:
+  POSTGRES_USER: enervision_ci
+  POSTGRES_PASSWORD: enervision_ci
+  POSTGRES_DB: enervision
+  MINIO_ROOT_USER: enervision_ci
+  MINIO_ROOT_PASSWORD: enervision_ci
+  MINIO_BUCKETS: raw,processed,models,backups
+  # Même contrainte que dashboard-e2e.yml : ENERVISION_API_PORT doit être
+  # fourni explicitement (vide), sinon le fallback "localhost" de
+  # infrastructure/config.py ne s'applique pas (cf. commentaire équivalent
+  # dans dashboard-e2e.yml).
+  ENERVISION_API_SCHEME: https
+  ENERVISION_API_HOST: api-mock.charlieandre.fr
+  ENERVISION_API_PORT: ""
+  ENERVISION_API_USERNAME: ${{ secrets.ENERVISION_API_USERNAME }}
+  ENERVISION_API_PASSWORD: ${{ secrets.ENERVISION_API_PASSWORD }}
+
+jobs:
+  load-test:
+    name: Locust
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start backend stack (docker compose)
+        run: docker compose up -d --build core_api traefik
+
+      - name: Wait for core_api to be reachable through Traefik
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost/api/v1/sites -o /dev/null; then
+              echo "core_api is up"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "core_api did not become ready in time"
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/core_api/load-tests/requirements.txt
+
+      - name: Install Locust
+        working-directory: apps/core_api/load-tests
+        run: pip install -r requirements.txt
+
+      - name: Run Locust (headless)
+        working-directory: apps/core_api/load-tests
+        # Informatif uniquement : le job ne doit jamais faire échouer la CI
+        # sur des seuils de perf (pas encore fiabilisés), voir docs/load-testing.md.
+        continue-on-error: true
+        run: |
+          locust -f locustfile.py --host http://localhost \
+            --users "${{ github.event.inputs.users || '20' }}" \
+            --spawn-rate "${{ github.event.inputs['spawn-rate'] || '5' }}" \
+            --run-time "${{ github.event.inputs['run-time'] || '2m' }}" \
+            --headless --csv=report --html=report.html
+
+      - name: Upload Locust report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-report
+          path: |
+            apps/core_api/load-tests/report*.csv
+            apps/core_api/load-tests/report.html
+          retention-days: 14
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop backend stack
+        if: always()
+        run: docker compose down -v
