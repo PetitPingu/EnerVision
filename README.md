@@ -124,6 +124,31 @@ cd apps/<service>
 python -m pytest -v
 ```
 
+### Tests d'intégration
+
+En complément des suites ci-dessus (mocks/fakes sur les ports), `core_api`,
+`etl_worker`, `prediction` et `recommendation` ont chacun une suite
+`tests/integration/` qui tape de vrais Postgres/Redis/MinIO — utile pour
+couvrir les adapters SQL/Redis/MinIO eux-mêmes (upsert, sérialisation...),
+pas testables avec des doubles. Marqués `@pytest.mark.integration` et
+**exclus par défaut** (`pytest.ini` : `addopts = -m "not integration"`), la
+commande `python -m pytest -v` ci-dessus reste donc inchangée.
+
+Pour les lancer en local :
+
+```bash
+docker compose up -d --wait postgres redis minio
+docker compose run --rm minio-init
+docker compose run --rm migrate
+
+cd apps/<service>
+python -m pytest -m integration -v
+```
+
+CI dédiée : [.github/workflows/integration-tests.yml](.github/workflows/integration-tests.yml)
+(mêmes services infra que `dashboard-e2e.yml`, sans construire les
+conteneurs applicatifs).
+
 Le dashboard a son lint, son build et ses tests e2e Playwright en CI
 (`.github/workflows/dashboard-*.yml`).
 
