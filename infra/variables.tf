@@ -142,13 +142,13 @@ variable "core_api_port" {
 variable "prediction_port" {
   type        = number
   default     = 8001
-  description = "Port exposé pour prediction (accès direct sans Traefik)"
+  description = "Port exposé pour prediction (accès direct sans Traefik, lié à 127.0.0.1 : ni le service ni JWT/RBAC ne sont vérifiés au-delà de core_api, donc pas d'exposition publique)"
 }
 
 variable "recommendation_port" {
   type        = number
   default     = 8002
-  description = "Port exposé pour recommendation (accès direct sans Traefik)"
+  description = "Port exposé pour recommendation (accès direct sans Traefik, lié à 127.0.0.1 : ni le service ni JWT/RBAC ne sont vérifiés au-delà de core_api, donc pas d'exposition publique)"
 }
 
 variable "dashboard_port" {

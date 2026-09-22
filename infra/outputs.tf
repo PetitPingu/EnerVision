@@ -44,13 +44,13 @@ output "core_api_url" {
 }
 
 output "prediction_url" {
-  description = "URL du service de prédiction (accès direct)"
-  value       = "http://${var.host}:${var.prediction_port}"
+  description = "URL du service de prédiction (accès direct, lié à 127.0.0.1 : n'est atteignable que depuis la VM elle-même)"
+  value       = "http://127.0.0.1:${var.prediction_port}"
 }
 
 output "recommendation_url" {
-  description = "URL du service de recommandation (accès direct)"
-  value       = "http://${var.host}:${var.recommendation_port}"
+  description = "URL du service de recommandation (accès direct, lié à 127.0.0.1 : n'est atteignable que depuis la VM elle-même)"
+  value       = "http://127.0.0.1:${var.recommendation_port}"
 }
 
 output "dashboard_url" {
@@ -83,9 +83,9 @@ output "service_urls" {
     core_api_traefik       = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}/"
     core_api_direct        = "http://${var.host}:${var.core_api_port}"
     prediction_traefik     = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}/prediction"
-    prediction_direct      = "http://${var.host}:${var.prediction_port}"
+    prediction_direct      = "http://127.0.0.1:${var.prediction_port}"
     recommendation_traefik = "http://${var.host}${var.traefik_http_port == 80 ? "" : ":${var.traefik_http_port}"}/recommendation"
-    recommendation_direct  = "http://${var.host}:${var.recommendation_port}"
+    recommendation_direct  = "http://127.0.0.1:${var.recommendation_port}"
     mlflow                 = "http://${var.host}:${var.mlflow_port}"
     minio_api              = "http://${var.host}:${var.minio_port}"
     minio_console          = "http://${var.host}:${var.minio_console_port}"
