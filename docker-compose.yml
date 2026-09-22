@@ -266,7 +266,11 @@ services:
       # Badge de drift (docs/monitoring_model.md, section 6) : core_api lit
       # ml_feature_drift_score directement depuis l'API HTTP de Prometheus.
       PROMETHEUS_URL: http://prometheus:9090
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      # Pas de CORS_ORIGINS ici : contrairement à ENERVISION_API_PORT plus
+      # haut, il n'y a pas besoin de le fournir explicitement, et le faire
+      # via ${CORS_ORIGINS} casse tout environnement sans cette variable
+      # (ex. CI) - os.environ.get() ne retombe sur le défaut Python que si
+      # la clé est absente, pas si elle vaut "" (voir infrastructure/config.py).
     depends_on:
       postgres:
         condition: service_healthy
