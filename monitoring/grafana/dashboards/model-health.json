@@ -145,13 +145,15 @@
     {
       "id": 3,
       "title": "Version du modèle active par site",
-      "description": "Permet de corréler une variation de MAE ou de drift avec un changement de version de modèle.",
+      "description": "Permet de corréler une variation de MAE ou de drift avec un changement de version de modèle. La valeur (epoch ms de trained_at) change quand le modèle est réentraîné : chaque valeur distincte devient un segment coloré sur la ligne du site, sans jamais créer de nouvelle série (cf. model_health_metrics.py).",
       "type": "state-timeline",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 35 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "expr": "ml_model_version", "legendFormat": "{{site}} - {{version}}" }
-      ]
+      "fieldConfig": {
+        "defaults": { "unit": "dateTimeAsIso" },
+        "overrides": []
+      },
+      "targets": [{ "expr": "ml_model_version", "legendFormat": "{{site}}" }]
     }
   ]
 }

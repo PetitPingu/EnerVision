@@ -6,7 +6,13 @@ Un process léger : pas de framework HTTP, juste
 démarrage du worker.
 """
 
+import logging
+
 from prometheus_client import Gauge, start_http_server
+
+from .model_health_reader import parse_model_version
+
+logger = logging.getLogger(__name__)
 
 ml_prediction_mae_24h = Gauge(
     "ml_prediction_mae_24h",
@@ -28,8 +34,9 @@ ml_feature_drift_score = Gauge(
 
 ml_model_version = Gauge(
     "ml_model_version",
-    "Vaut 1 pour la version de modèle actuellement observée sur un site",
-    ["site", "version"],
+    "Date d'entraînement (trained_at) de la version de modèle actuellement "
+    "observée sur un site, en epoch millisecondes.",
+    ["site"],
 )
 
 ml_prediction_mae_by_horizon = Gauge(
@@ -68,7 +75,18 @@ def publish_model_health(
         ml_feature_drift_score.labels(site=site).set(score)
 
     for site, version in model_version_by_site.items():
-        ml_model_version.labels(site=site, version=version).set(1)
+        # `version` (ex: "2026-09-17T06-58-11Z") est encodee dans la VALEUR
+        # (epoch ms), jamais dans un label : un label qui change de valeur a
+        # chaque nouvelle version ferait creer par Prometheus une toute
+        # nouvelle serie a chaque fois (les anciennes ne disparaissent
+        # jamais), et un panel Grafana en state-timeline se retrouve avec
+        # une ligne par (site, version) au lieu d'une ligne par site -
+        # constate en pratique apres plusieurs changements de version.
+        trained_at = parse_model_version(version)
+        if trained_at is None:
+            logger.warning("model_version illisible pour %s : %r", site, version)
+            continue
+        ml_model_version.labels(site=site).set(trained_at.timestamp() * 1000)
 
     for site, mae_by_bucket in (mae_by_horizon_by_site or {}).items():
         for bucket, mae in mae_by_bucket.items():
