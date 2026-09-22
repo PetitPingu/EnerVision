@@ -32,11 +32,30 @@ grain, une panne est un événement quasi unique — une seule ligne par site
 et par minute dans tout l'historique, jamais revue au même instant — donc
 rien à apprendre, seulement du bruit. `train_model()` agrège d'abord les
 lectures en buckets **(site, heure)** avant `build_features`/
-`build_sensor_targets` : un capteur est `off` sur ce bucket si au moins
-`MIN_OFF_READINGS_PER_HOUR` (5 par défaut, sur 60 lectures/heure au maximum) lectures de l'heure l'ont vu
-`off`, `on` sinon. Le seuil (pas juste « au moins une fois ») écarte aussi
-les anomalies isolées d'une seule lecture. C'est aussi le grain que
+`build_sensor_targets` : un capteur est `off` sur ce bucket si la part des
+lectures de l'heure qui l'ont vu `off` atteint `MIN_OFF_RATIO_PER_HOUR`
+(**10 % par défaut**), `on` sinon. Un ratio plutôt qu'un nombre fixe de
+lectures, car le rythme réel varie selon la source (observé entre ~6 et
+~40-45 lectures/heure/site selon l'échantillon) — voir « Limites connues »
+pour le calcul de ce seuil. C'est aussi le grain que
 `/predict/state/range` expose déjà (un point par heure).
+
+```mermaid
+flowchart LR
+    subgraph minute["Lectures minute (readings_curated)"]
+        direction TB
+        M1["14:00 — humidity: 41%"]
+        M2["14:05 — humidity: null"]
+        M3["14:10 — humidity: null"]
+        M4["14:15 — humidity: null"]
+        M5["14:20 … 14:55 — humidity: OK"]
+    end
+
+    minute -->|"groupby(site_id, heure)"| bucket["Bucket (SITE001, 14h)<br/>12 lectures, 3 off"]
+    bucket -->|"3/12 = 25% ≥ 10%"| off["humidity_percent = off<br/>pour l'heure 14h"]
+
+    style off fill:#fde2e2,stroke:#c53030
+```
 
 ## Pourquoi un second modèle plutôt qu'étendre le premier ?
 
@@ -204,6 +223,15 @@ MLflow (`mlflow.log_metrics(metadata.metrics)`).
   `aggregate_hourly`, chaque panne est un événement unique (une ligne par
   site et par minute, jamais revue), donc pure coïncidence plutôt qu'un
   motif généralisable — d'où l'agrégation à l'heure.
+- **Seuil `MIN_OFF_RATIO_PER_HOUR` calibré sur un échantillon réel, pas figé** :
+  un premier échantillon (994 lectures, 7 sites) suggérait ~6 lectures/heure/site,
+  d'où un seuil initial à 30 %. Un second échantillon (un seul site sur ~20h) a
+  montré une cadence bien plus dense (~87s entre lectures, ~40-45/heure) : à cette
+  cadence, une vraie coupure réseau de 2-3 lectures consécutives (~4-5 min) ne pèse
+  que ~5-7 % de l'heure, et un seuil à 30 % l'aurait classée `on` à tort. Le seuil
+  a été baissé à **10 %** pour capter ces pannes courtes tout en restant net du
+  bruit d'une lecture isolée (~2,5 % de l'heure à cette cadence). Si la cadence
+  réelle de production diverge encore, ce seuil reste à revalider.
 - **Pannes potentiellement aléatoires** : si le générateur de données ne
   corrèle pas vraiment les pannes à l'heure (ni à rien d'observable), même
   agrégées, elles restent en grande partie imprévisibles ; aucun modèle ne

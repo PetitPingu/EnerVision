@@ -4,9 +4,9 @@ Postgres).
 Simule le résultat d'une requête SQL sur readings_curated
 (colonnes site_id / timestamp / data_quality) : plusieurs lectures par
 heure et par site (comme readings_curated, une par minute), toutes
-cohérentes entre elles pour une même heure - nécessaire pour que
-aggregate_hourly() (MIN_OFF_READINGS_PER_HOUR) retienne les pannes au lieu
-de les rejeter comme du bruit.
+cohérentes entre elles pour une même heure - un état par capteur constant
+sur toute l'heure (0% ou 100% off), donc indifférent à la valeur exacte de
+MIN_OFF_RATIO_PER_HOUR côté aggregate_hourly().
 """
 
 import pandas as pd
@@ -15,8 +15,9 @@ from application.ports import StateTrainingDataPort
 from infrastructure.ml.state.features import RAW_COLUMNS, SENSOR_COLUMNS
 
 # Plusieurs lectures par (site, heure), comme readings_curated (une par
-# minute) - au-dessus de MIN_OFF_READINGS_PER_HOUR (5) pour que les pannes
-# soient retenues après aggregate_hourly(), pas rejetées comme du bruit.
+# minute) - chaque capteur est on ou off sur toute l'heure (voir
+# _sensor_values), donc le nombre exact de lectures n'affecte pas
+# aggregate_hourly() ici (contrairement à des données réelles bruitées).
 _READINGS_PER_HOUR = [5, 15, 25, 35, 45, 55]
 _HOURS = range(8, 20)
 _SITE_COUNT = 7

@@ -76,14 +76,13 @@ def _reading(site_id, timestamp, off=()):
 
 
 def test_aggregate_hourly_keeps_sensor_on_with_a_single_isolated_blip():
-    # Un seul relevé "off" dans l'heure : sous le seuil, ignoré comme bruit.
+    # 1 relevé "off" sur 12 (~8%) : sous le seuil (10%), ignoré comme bruit -
+    # cadence dense (~1 lecture toutes les 5 min) observée en réel (voir
+    # docs/state-model.md, section Limites).
     df = pd.DataFrame(
-        [
-            _reading("SITE001", "2026-09-22T14:00:00"),
-            _reading("SITE001", "2026-09-22T14:01:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:02:00"),
-        ]
+        [_reading("SITE001", f"2026-09-22T14:{minute:02d}:00") for minute in range(0, 60, 5)]
     )
+    df.loc[1, "humidity_percent"] = None  # une seule lecture off sur 12
 
     hourly = aggregate_hourly(df)
 
@@ -93,17 +92,12 @@ def test_aggregate_hourly_keeps_sensor_on_with_a_single_isolated_blip():
 
 
 def test_aggregate_hourly_marks_sensor_off_with_repeated_failures():
-    # 5 relevés "off" (>= MIN_OFF_READINGS_PER_HOUR) dans la même heure.
+    # 3 relevés "off" sur 12 (25%, >= 10%) dans la même heure - ex. une
+    # coupure réseau de 3 lectures consécutives (~15 min à cette cadence).
     df = pd.DataFrame(
-        [
-            _reading("SITE001", "2026-09-22T14:00:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:01:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:02:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:03:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:04:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:05:00"),
-        ]
+        [_reading("SITE001", f"2026-09-22T14:{minute:02d}:00") for minute in range(0, 60, 5)]
     )
+    df.loc[[0, 1, 2], "humidity_percent"] = None
 
     hourly = aggregate_hourly(df)
 
@@ -128,12 +122,13 @@ def test_aggregate_hourly_groups_by_site_and_hour():
 
 
 def test_aggregate_hourly_respects_custom_threshold():
+    # 1 relevé "off" sur 2 = 50%.
     df = pd.DataFrame(
         [
             _reading("SITE001", "2026-09-22T14:00:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:01:00"),
+            _reading("SITE001", "2026-09-22T14:30:00"),
         ]
     )
 
-    assert aggregate_hourly(df, min_off_readings=1).loc[0, "humidity_percent"] is None
-    assert aggregate_hourly(df, min_off_readings=2).loc[0, "humidity_percent"] == 1.0
+    assert aggregate_hourly(df, min_off_ratio=0.4).loc[0, "humidity_percent"] is None
+    assert aggregate_hourly(df, min_off_ratio=0.6).loc[0, "humidity_percent"] == 1.0

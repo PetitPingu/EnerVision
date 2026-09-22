@@ -77,29 +77,35 @@ def build_sensor_targets(df: pd.DataFrame) -> pd.DataFrame:
     return cleaned[SENSOR_COLUMNS].notna().astype(int).reset_index(drop=True)
 
 
-# Nombre minimal de lectures "off" dans l'heure pour considérer le capteur
-# en panne sur ce bucket horaire (jusqu'à 60 lectures/heure à une par
-# minute). Pas juste "au moins une fois" : ignore un blip isolé, probablement
-# du bruit, et ne garde que les pannes qui persistent un minimum dans l'heure.
-MIN_OFF_READINGS_PER_HOUR = 5
+# Part minimale de lectures "off" dans l'heure pour considérer le capteur en
+# panne sur ce bucket horaire. Un ratio, pas un nombre fixe de lectures : le
+# rythme réel des lectures par heure varie (etl_worker toutes les 60s en
+# théorie, observé en pratique entre ~6 et ~40-45 lectures/heure/site selon
+# l'échantillon). À cadence dense (~40-45/h, écart ~87s entre lectures), une
+# coupure réseau réelle de 2-3 lectures consécutives (~4-5 min) ne pèse que
+# ~5-7% de l'heure : un seuil à 30% la classerait "on" à tort. 10% capte ces
+# pannes courtes tout en restant au-dessus du bruit d'une lecture isolée
+# (à cadence dense, ~2,5% de l'heure).
+MIN_OFF_RATIO_PER_HOUR = 0.1
 
 
 def aggregate_hourly(
     df: pd.DataFrame,
-    min_off_readings: int = MIN_OFF_READINGS_PER_HOUR,
+    min_off_ratio: float = MIN_OFF_RATIO_PER_HOUR,
 ) -> pd.DataFrame:
     """Agrège les lectures minute par minute en buckets horaires
-    (site_id, heure) : un capteur est "off" pour cette heure si AU MOINS
-    `min_off_readings` lectures de l'heure l'ont vu off, "on" sinon.
+    (site_id, heure) : un capteur est "off" pour cette heure si la part de
+    lectures de l'heure qui l'ont vu off atteint `min_off_ratio`, "on" sinon.
 
-    À l'échelle de la minute, chaque panne est un événement quasi unique
-    (une seule ligne par site et par minute dans tout l'historique) : le
-    modèle ne peut apprendre aucun motif réel, seulement du bruit. À
-    l'échelle de l'heure, la même panne devient un exemple que d'autres
-    heures peuvent effectivement recouper - et c'est aussi le grain que
-    /predict/state/range expose déjà (un point par heure). Le seuil (pas
-    juste "au moins une fois") écarte en plus les anomalies isolées d'une
-    seule lecture. Voir docs/state-model.md, section Limites.
+    À l'échelle de la lecture individuelle, chaque panne est un événement
+    quasi unique (une seule ligne par site et par instant dans tout
+    l'historique) : le modèle ne peut apprendre aucun motif réel, seulement
+    du bruit. À l'échelle de l'heure, la même panne devient un exemple que
+    d'autres heures peuvent effectivement recouper - et c'est aussi le
+    grain que /predict/state/range expose déjà (un point par heure). Un
+    ratio (pas un nombre absolu de lectures) écarte les anomalies isolées
+    sans dépendre du nombre exact de lectures reçues dans l'heure. Voir
+    docs/state-model.md, section Limites.
     """
     missing = set(RAW_COLUMNS) - set(df.columns)
     if missing:
@@ -111,8 +117,9 @@ def aggregate_hourly(
 
     rows = []
     for (site_id, hour_bucket), group in working.groupby(["site_id", "_hour_bucket"], sort=False):
+        total = len(group)
         is_off = {
-            column: bool(group[column].isna().sum() >= min_off_readings)
+            column: bool((group[column].isna().sum() / total) >= min_off_ratio)
             for column in SENSOR_COLUMNS
         }
         row = {
