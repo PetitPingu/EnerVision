@@ -33,7 +33,7 @@ et par minute dans tout l'historique, jamais revue au même instant — donc
 rien à apprendre, seulement du bruit. `train_model()` agrège d'abord les
 lectures en buckets **(site, heure)** avant `build_features`/
 `build_sensor_targets` : un capteur est `off` sur ce bucket si au moins
-`MIN_OFF_READINGS_PER_HOUR` (2 par défaut) lectures de l'heure l'ont vu
+`MIN_OFF_READINGS_PER_HOUR` (5 par défaut, sur 60 lectures/heure au maximum) lectures de l'heure l'ont vu
 `off`, `on` sinon. Le seuil (pas juste « au moins une fois ») écarte aussi
 les anomalies isolées d'une seule lecture. C'est aussi le grain que
 `/predict/state/range` expose déjà (un point par heure).

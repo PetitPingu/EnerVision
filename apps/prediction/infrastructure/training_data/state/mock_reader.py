@@ -15,9 +15,9 @@ from application.ports import StateTrainingDataPort
 from infrastructure.ml.state.features import RAW_COLUMNS, SENSOR_COLUMNS
 
 # Plusieurs lectures par (site, heure), comme readings_curated (une par
-# minute) - au-dessus de MIN_OFF_READINGS_PER_HOUR pour que les pannes
+# minute) - au-dessus de MIN_OFF_READINGS_PER_HOUR (5) pour que les pannes
 # soient retenues après aggregate_hourly(), pas rejetées comme du bruit.
-_READINGS_PER_HOUR = [5, 25, 45]
+_READINGS_PER_HOUR = [5, 15, 25, 35, 45, 55]
 _HOURS = range(8, 20)
 _SITE_COUNT = 7
 

@@ -78,10 +78,10 @@ def build_sensor_targets(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # Nombre minimal de lectures "off" dans l'heure pour considérer le capteur
-# en panne sur ce bucket horaire. > 1 (pas juste "au moins une fois") pour
-# ignorer un blip isolé d'une minute, probablement du bruit, et ne garder
-# que les pannes qui persistent un minimum dans l'heure.
-MIN_OFF_READINGS_PER_HOUR = 2
+# en panne sur ce bucket horaire (jusqu'à 60 lectures/heure à une par
+# minute). Pas juste "au moins une fois" : ignore un blip isolé, probablement
+# du bruit, et ne garde que les pannes qui persistent un minimum dans l'heure.
+MIN_OFF_READINGS_PER_HOUR = 5
 
 
 def aggregate_hourly(

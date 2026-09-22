@@ -93,12 +93,15 @@ def test_aggregate_hourly_keeps_sensor_on_with_a_single_isolated_blip():
 
 
 def test_aggregate_hourly_marks_sensor_off_with_repeated_failures():
-    # Deux relevés "off" (>= MIN_OFF_READINGS_PER_HOUR) dans la même heure.
+    # 5 relevés "off" (>= MIN_OFF_READINGS_PER_HOUR) dans la même heure.
     df = pd.DataFrame(
         [
             _reading("SITE001", "2026-09-22T14:00:00", off=["humidity_percent"]),
             _reading("SITE001", "2026-09-22T14:01:00", off=["humidity_percent"]),
-            _reading("SITE001", "2026-09-22T14:02:00"),
+            _reading("SITE001", "2026-09-22T14:02:00", off=["humidity_percent"]),
+            _reading("SITE001", "2026-09-22T14:03:00", off=["humidity_percent"]),
+            _reading("SITE001", "2026-09-22T14:04:00", off=["humidity_percent"]),
+            _reading("SITE001", "2026-09-22T14:05:00"),
         ]
     )
 
