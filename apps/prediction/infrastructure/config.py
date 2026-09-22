@@ -31,6 +31,9 @@ class Config:
     # MinIO — mêmes variables d'environnement que l'ETL (voir .env racine).
     MODEL_STORE = os.environ.get("MODEL_STORE", "minio")
     MODEL_NAME = os.environ.get("MODEL_NAME", "energy-consumption")
+    # Modèle de classification de l'état futur d'un capteur (data_quality) -
+    # même MODEL_STORE, suivi séparément sous ce nom (voir predict_state.py).
+    STATE_MODEL_NAME = os.environ.get("STATE_MODEL_NAME", "sensor-state-model")
     MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
     MINIO_ACCESS_KEY = os.environ.get("MINIO_ROOT_USER", "enervision")
     MINIO_SECRET_KEY = os.environ.get("MINIO_ROOT_PASSWORD", "changeme123")

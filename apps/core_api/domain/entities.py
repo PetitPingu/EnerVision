@@ -34,6 +34,16 @@ class Reading:
 
 
 @dataclass(frozen=True)
+class User:
+    """Un compte utilisateur du dashboard (voir docs/seq_auth_token.md)."""
+
+    id: str
+    email: str
+    password_hash: str
+    role: str | None = None
+
+
+@dataclass(frozen=True)
 class Alert:
     """Une alerte de consommation sur un site."""
 

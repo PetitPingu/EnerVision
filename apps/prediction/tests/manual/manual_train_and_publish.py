@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from application.train_and_publish import train_and_publish
+from application.consumption.train_and_publish import train_and_publish
 from infrastructure.config import Config
 from infrastructure.model_store import create_model_store
 from infrastructure.training_data import create_training_data_reader

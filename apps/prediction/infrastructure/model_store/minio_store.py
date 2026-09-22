@@ -93,8 +93,7 @@ class MinioModelStore(ModelStorePort):
             {
                 "model_name": metadata.model_name,
                 "trained_at": metadata.trained_at,
-                "mae": metadata.mae,
-                "rmse": metadata.rmse,
+                **metadata.metrics,
                 "train_size": metadata.train_size,
                 "test_size": metadata.test_size,
                 "features": list(metadata.features),
@@ -125,12 +124,13 @@ class MinioModelStore(ModelStorePort):
 
     def _get_metadata(self, object_key: str) -> SavedModelMetadata:
         data = json.loads(self._get_object_bytes(object_key).decode("utf-8"))
+        reserved_keys = {"model_name", "trained_at", "train_size", "test_size", "features"}
+        metrics = {key: float(value) for key, value in data.items() if key not in reserved_keys}
 
         return SavedModelMetadata(
             model_name=data["model_name"],
             trained_at=data["trained_at"],
-            mae=float(data["mae"]),
-            rmse=float(data["rmse"]),
+            metrics=metrics,
             train_size=int(data["train_size"]),
             test_size=int(data["test_size"]),
             features=tuple(data["features"]),

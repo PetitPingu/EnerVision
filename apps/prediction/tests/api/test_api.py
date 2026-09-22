@@ -2,13 +2,14 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-from application.predict import (
+from application.consumption.predict import (
     InvalidPredictionRangeError,
     ModelNotLoadedError,
     PredictionPoint,
     PredictionRangeResult,
     PredictionResult,
 )
+from application.state.predict_state import StateModelNotLoadedError, StatePredictionResult
 from presentation.api import app
 
 
@@ -28,6 +29,7 @@ def test_root():
     assert "/health" in body["endpoints"]
     assert "/predict" in body["endpoints"]
     assert "/predict/range" in body["endpoints"]
+    assert "/predict/state" in body["endpoints"]
 
 
 def test_predict_returns_prediction(monkeypatch):
@@ -174,6 +176,61 @@ def test_predict_returns_422_for_invalid_timestamp():
     client = TestClient(app)
     response = client.get(
         "/predict",
+        params={"site_id": "SITE001", "timestamp": "not-a-date"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "timestamp must be ISO8601"}
+
+
+def test_predict_state_returns_prediction(monkeypatch):
+    target = datetime(2026, 9, 17, 14, 30, tzinfo=timezone.utc)
+
+    def fake_predict_state(**_kwargs):
+        return StatePredictionResult(
+            site_id="SITE001",
+            target_timestamp=target,
+            sensors={"voltage_v": "on", "humidity_percent": "off"},
+            model_version="2026-09-16T14-30-00Z",
+        )
+
+    monkeypatch.setattr("presentation.api.run_predict_state", fake_predict_state)
+
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state",
+        params={"site_id": "SITE001", "timestamp": "2026-09-17T14:30:00Z"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "site_id": "SITE001",
+        "target_timestamp": "2026-09-17T14:30:00Z",
+        "sensors": {"voltage_v": "on", "humidity_percent": "off"},
+        "model_version": "2026-09-16T14-30-00Z",
+    }
+
+
+def test_predict_state_returns_503_when_model_not_loaded(monkeypatch):
+    def fake_predict_state(**_kwargs):
+        raise StateModelNotLoadedError("missing model")
+
+    monkeypatch.setattr("presentation.api.run_predict_state", fake_predict_state)
+
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state",
+        params={"site_id": "SITE001", "timestamp": "2026-09-17T14:30:00Z"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "state model not loaded"}
+
+
+def test_predict_state_returns_422_for_invalid_timestamp():
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state",
         params={"site_id": "SITE001", "timestamp": "not-a-date"},
     )
 

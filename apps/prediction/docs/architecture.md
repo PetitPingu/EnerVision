@@ -7,31 +7,51 @@ implémentées dans `infrastructure/`.
 
 ## Arborescence
 
+Deux modèles cohabitent dans le service : **consumption** (régression,
+`energy-consumption`) et **state** (classification on/off de chaque capteur,
+`sensor-state-model` — voir [state-model.md](state-model.md)). Chaque
+couche qui contient de la logique spécifique à un modèle est scindée en
+sous-package `consumption/` / `state/` ; ce qui est générique (ports,
+`ModelStorePort` et ses implémentations) reste partagé, un seul et même
+`ModelStorePort` sert les deux modèles (distingués par `model_name`).
+
 ```
 apps/prediction/
-├── main.py                         # Point d'entrée uvicorn
+├── main.py                         # Point d'entrée uvicorn (cron des 2 modèles)
 ├── presentation/
-│   └── api.py                      # FastAPI (/health)
+│   └── api.py                      # FastAPI (/predict, /predict/range, /predict/state)
 ├── application/
-│   ├── ports/
-│   │   ├── training_data_port.py   # TrainingDataPort
-│   │   └── model_store_port.py     # ModelStorePort + SavedModelMetadata
-│   └── train_and_publish.py        # Use case entraînement + publication
+│   ├── ports/                      # Contrats partagés
+│   │   ├── training_data_port.py       # TrainingDataPort (consumption)
+│   │   ├── state_training_data_port.py # StateTrainingDataPort
+│   │   └── model_store_port.py         # ModelStorePort + SavedModelMetadata (partagé)
+│   ├── consumption/                # Use cases régression consommation
+│   │   ├── predict.py
+│   │   ├── train_and_publish.py
+│   │   └── retrain_if_better.py
+│   └── state/                      # Use cases classification état capteur
+│       ├── predict_state.py
+│       ├── train_and_publish_state.py
+│       └── retrain_state_if_better.py
 ├── domain/                         # Vide (phase 1) — entités métier à venir
 └── infrastructure/
     ├── config.py
-    ├── training_data/              # Implémentations TrainingDataPort
+    ├── training_data/
+    │   ├── factory.py                  # Choisit l'implémentation des 2 ports
+    │   ├── consumption/                # Implémentations TrainingDataPort
+    │   │   ├── mock_reader.py
+    │   │   ├── json_file_reader.py
+    │   │   └── postgres_reader.py
+    │   └── state/                      # Implémentations StateTrainingDataPort
+    │       ├── mock_reader.py
+    │       └── postgres_reader.py
+    ├── model_store/                # Implémentations ModelStorePort (partagées)
     │   ├── factory.py
-    │   ├── mock_reader.py
-    │   ├── json_file_reader.py
-    │   └── postgres_reader.py
-    ├── model_store/                # Implémentations ModelStorePort
-    │   ├── factory.py
-    │   └── minio_store.py
+    │   ├── minio_store.py
+    │   └── mlflow_store.py
     └── ml/                         # Feature engineering + entraînement sklearn
-        ├── features.py
-        ├── pipeline.py
-        └── trainer.py
+        ├── consumption/                # features.py, pipeline.py, trainer.py
+        └── state/                      # features.py, pipeline.py, trainer.py
 ```
 
 ## Couches

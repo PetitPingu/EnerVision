@@ -19,3 +19,7 @@ venv/
 *.egg-info/
 .pytest_cache/
 .coverage
+
+# Rapports Locust générés en local (voir docs/load-testing.md)
+apps/core_api/load-tests/report*.csv
+apps/core_api/load-tests/report.html
