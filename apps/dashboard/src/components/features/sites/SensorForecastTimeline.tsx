@@ -106,15 +106,11 @@ export function SensorForecastTimeline({
             Prévu à 24h : {forecastAt24h.state === "off" ? "En panne" : "En marche"}
           </div>
 
-          <p className="mt-2 text-xs text-zinc-400">
-            Confiance du modèle : {Math.round(forecastAt24h.confidence * 100)}%
-          </p>
-
           <div className="mt-2 flex gap-0.5" aria-hidden="true">
             {points.map((point) => (
               <span
                 key={point.hour}
-                title={`H+${point.hour} : ${point.state === "off" ? "En panne" : "En marche"} (confiance ${Math.round(point.confidence * 100)}%)`}
+                title={`H+${point.hour} : ${point.state === "off" ? "En panne" : "En marche"}`}
                 className={`h-6 flex-1 rounded-sm ${
                   point.state === "off" ? "bg-red-500" : "bg-emerald-500"
                 }`}
