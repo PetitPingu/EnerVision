@@ -153,6 +153,7 @@ resource "docker_container" "core_api" {
     "ENERVISION_API_USERNAME=${var.enervision_api_username}",
     "ENERVISION_API_PASSWORD=${var.enervision_api_password}",
     "PROMETHEUS_URL=http://prometheus:9090",
+    "REDIS_HOST=redis",
   ]
 
   ports {
@@ -181,6 +182,7 @@ resource "docker_container" "core_api" {
     docker_container.database,
     docker_container.prediction,
     docker_container.recommendation,
+    docker_container.redis,
   ]
 }
 
@@ -204,11 +206,13 @@ resource "docker_container" "etl_worker" {
     "MINIO_ROOT_PASSWORD=${var.minio_root_password}",
     "MINIO_RAW_BUCKET=${var.minio_raw_bucket}",
     "ETL_POLL_INTERVAL_SECONDS=${var.etl_poll_interval_seconds}",
+    "REDIS_HOST=redis",
   ]
 
   depends_on = [
     docker_container.database,
     docker_container.minio,
     docker_container.minio_init,
+    docker_container.redis,
   ]
 }
