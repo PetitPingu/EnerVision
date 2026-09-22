@@ -9,7 +9,14 @@ from application.consumption.predict import (
     PredictionRangeResult,
     PredictionResult,
 )
-from application.state.predict_state import StateModelNotLoadedError, StatePredictionResult
+from application.state.predict_state import (
+    InvalidStateRangeError,
+    SensorPrediction,
+    StateModelNotLoadedError,
+    StatePredictionResult,
+    StateRangePoint,
+    StateRangeResult,
+)
 from presentation.api import app
 
 
@@ -190,7 +197,10 @@ def test_predict_state_returns_prediction(monkeypatch):
         return StatePredictionResult(
             site_id="SITE001",
             target_timestamp=target,
-            sensors={"voltage_v": "on", "humidity_percent": "off"},
+            sensors={
+                "voltage_v": SensorPrediction(state="on", confidence=0.92),
+                "humidity_percent": SensorPrediction(state="off", confidence=0.61),
+            },
             model_version="2026-09-16T14-30-00Z",
         )
 
@@ -206,7 +216,10 @@ def test_predict_state_returns_prediction(monkeypatch):
     assert response.json() == {
         "site_id": "SITE001",
         "target_timestamp": "2026-09-17T14:30:00Z",
-        "sensors": {"voltage_v": "on", "humidity_percent": "off"},
+        "sensors": {
+            "voltage_v": {"state": "on", "confidence": 0.92},
+            "humidity_percent": {"state": "off", "confidence": 0.61},
+        },
         "model_version": "2026-09-16T14-30-00Z",
     }
 
@@ -236,3 +249,90 @@ def test_predict_state_returns_422_for_invalid_timestamp():
 
     assert response.status_code == 422
     assert response.json() == {"detail": "timestamp must be ISO8601"}
+
+
+def test_predict_state_range_returns_points(monkeypatch):
+    start = datetime(2026, 9, 17, 10, 0, tzinfo=timezone.utc)
+
+    def fake_predict_state_range(**_kwargs):
+        return StateRangeResult(
+            site_id="SITE001",
+            hours=2,
+            model_version="2026-09-16T14-30-00Z",
+            points=(
+                StateRangePoint(
+                    target_timestamp=start.replace(hour=11),
+                    sensors={"voltage_v": SensorPrediction(state="on", confidence=0.9)},
+                ),
+                StateRangePoint(
+                    target_timestamp=start.replace(hour=12),
+                    sensors={"voltage_v": SensorPrediction(state="off", confidence=0.7)},
+                ),
+            ),
+        )
+
+    monkeypatch.setattr("presentation.api.run_predict_state_range", fake_predict_state_range)
+
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z", "hours": 2},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "site_id": "SITE001",
+        "hours": 2,
+        "model_version": "2026-09-16T14-30-00Z",
+        "points": [
+            {
+                "target_timestamp": "2026-09-17T11:00:00Z",
+                "sensors": {"voltage_v": {"state": "on", "confidence": 0.9}},
+            },
+            {
+                "target_timestamp": "2026-09-17T12:00:00Z",
+                "sensors": {"voltage_v": {"state": "off", "confidence": 0.7}},
+            },
+        ],
+    }
+
+
+def test_predict_state_range_returns_422_for_invalid_hours(monkeypatch):
+    def fake_predict_state_range(**_kwargs):
+        raise InvalidStateRangeError("hours must be between 1 and 168, got 0")
+
+    monkeypatch.setattr("presentation.api.run_predict_state_range", fake_predict_state_range)
+
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z", "hours": 0},
+    )
+
+    assert response.status_code == 422
+
+
+def test_predict_state_range_returns_503_when_model_not_loaded(monkeypatch):
+    def fake_predict_state_range(**_kwargs):
+        raise StateModelNotLoadedError("missing model")
+
+    monkeypatch.setattr("presentation.api.run_predict_state_range", fake_predict_state_range)
+
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z"},
+    )
+
+    assert response.status_code == 503
+
+
+def test_predict_state_range_returns_422_for_invalid_start_time():
+    client = TestClient(app)
+    response = client.get(
+        "/predict/state/range",
+        params={"site_id": "SITE001", "start_time": "not-a-date"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "start_time must be ISO8601"}

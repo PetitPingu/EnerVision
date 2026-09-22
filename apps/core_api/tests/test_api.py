@@ -322,3 +322,65 @@ def test_predictions_sensors_requires_timestamp(monkeypatch):
     response = client.get("/api/v1/predictions/sensors", params={"site_id": "SITE001"})
 
     assert response.status_code == 422
+
+
+def test_predictions_sensors_range_relays_prediction_api_client(monkeypatch):
+    payload = {
+        "site_id": "SITE001",
+        "hours": 24,
+        "model_version": "2026-09-16T14-30-00Z",
+        "points": [
+            {
+                "target_timestamp": "2026-09-17T11:00:00Z",
+                "sensors": {"voltage_v": {"state": "on", "confidence": 0.9}},
+            }
+        ],
+    }
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state_range.return_value = payload
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z", "hours": 24},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    mock_prediction_api.get_sensor_state_range.assert_called_once_with(
+        site_id="SITE001", start_time="2026-09-17T10:00:00Z", hours=24
+    )
+
+
+def test_predictions_sensors_range_returns_502_when_service_unavailable(monkeypatch):
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state_range.return_value = None
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z"},
+    )
+
+    assert response.status_code == 502
+
+
+def test_predictions_sensors_range_returns_503_when_model_not_loaded(monkeypatch):
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state_range.side_effect = PredictionModelNotLoadedError()
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z"},
+    )
+
+    assert response.status_code == 503
+
+
+def test_predictions_sensors_range_requires_start_time(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/predictions/sensors/range", params={"site_id": "SITE001"})
+
+    assert response.status_code == 422

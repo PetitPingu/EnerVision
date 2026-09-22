@@ -92,3 +92,36 @@ class PredictionApiClient:
             return None
 
         return response.json()
+
+    def get_sensor_state_range(self, site_id: str, start_time: str, hours: int = 24) -> dict | None:
+        """Relaie GET /predict/state/range du service prediction : état
+        on/off (+ confiance) prédit heure par heure, sur `hours` heures.
+
+        Même distinction que get_sensor_state() entre 503 (aucun modèle
+        promu, lève PredictionModelNotLoadedError) et une panne générique
+        (None)."""
+        try:
+            response = requests.get(
+                f"{self._base_url}/predict/state/range",
+                params={"site_id": site_id, "start_time": start_time, "hours": hours},
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 503:
+                raise PredictionModelNotLoadedError from exc
+            logger.error(
+                "Échec de l'appel au service prediction (predict/state/range, %s) : %s",
+                site_id,
+                exc,
+            )
+            return None
+        except requests.RequestException as exc:
+            logger.error(
+                "Échec de l'appel au service prediction (predict/state/range, %s) : %s",
+                site_id,
+                exc,
+            )
+            return None
+
+        return response.json()

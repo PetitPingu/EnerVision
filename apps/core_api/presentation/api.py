@@ -178,6 +178,7 @@ def root() -> dict:
             "/api/v1/sensors/status",
             "/api/v1/predictions/range",
             "/api/v1/predictions/sensors",
+            "/api/v1/predictions/sensors/range",
             "/api/v1/recommendations",
         ]
     }
@@ -425,6 +426,42 @@ def predict_sensors_state(
     _assert_site_access(current_user, site_id)
     try:
         result = prediction_api.get_sensor_state(site_id=site_id, timestamp=timestamp)
+    except PredictionModelNotLoadedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Aucun modèle d'état des capteurs n'a encore été entraîné",
+        )
+    if result is None:
+        raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
+    return result
+
+
+@app.get(
+    "/api/v1/predictions/sensors/range",
+    tags=["Predictions"],
+    summary="État on/off prédit des capteurs d'un site, heure par heure",
+)
+def predict_sensors_state_range(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    start_time: str = Query(
+        ...,
+        description="Instant de départ au format ISO 8601 (exclu, la 1re heure prédite est start_time + 1h), ex: 2026-09-17T08:00:00Z",
+    ),
+    hours: int = Query(
+        24,
+        ge=1,
+        le=24 * 7,
+        description="Nombre d'heures à prédire à partir de start_time (défaut 24, max 7 jours)",
+    ),
+    current_user: CurrentUser = Depends(require_auth),
+) -> dict:
+    """Relaie GET /predict/state/range du service prediction : état on/off
+    + confiance, un point par heure sur `hours` heures."""
+    _assert_site_access(current_user, site_id)
+    try:
+        result = prediction_api.get_sensor_state_range(
+            site_id=site_id, start_time=start_time, hours=hours
+        )
     except PredictionModelNotLoadedError:
         raise HTTPException(
             status_code=503,

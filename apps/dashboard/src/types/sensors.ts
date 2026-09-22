@@ -1,5 +1,14 @@
 export type SensorOnOffState = "on" | "off";
 
+/** État prédit d'un capteur + confiance du modèle (probabilité de la
+ * classe prédite, entre 0 et 1 — pas un intervalle de confiance
+ * statistique), voir apps/prediction/infrastructure/ml/state/pipeline.py
+ * (predict_with_confidence). */
+export type SensorPrediction = {
+  state: SensorOnOffState;
+  confidence: number;
+};
+
 /**
  * Réponse de GET /api/v1/predictions/sensors (relais de
  * GET /predict/state côté service prediction) : état on/off *prédit* par
@@ -13,8 +22,23 @@ export type SensorOnOffState = "on" | "off";
 export type SensorStatePrediction = {
   site_id: string;
   target_timestamp: string;
-  sensors: Record<string, SensorOnOffState>;
+  sensors: Record<string, SensorPrediction>;
   model_version: string;
+};
+
+/** Un point de GET /api/v1/predictions/sensors/range (une heure). */
+export type SensorStateRangePoint = {
+  target_timestamp: string;
+  sensors: Record<string, SensorPrediction>;
+};
+
+/** Réponse de GET /api/v1/predictions/sensors/range : un point par heure,
+ * de start_time + 1h à start_time + hours. */
+export type SensorStateRangePrediction = {
+  site_id: string;
+  hours: number;
+  model_version: string;
+  points: SensorStateRangePoint[];
 };
 
 /**

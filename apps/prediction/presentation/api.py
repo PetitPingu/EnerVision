@@ -22,8 +22,11 @@ from application.consumption.predict import (
     predict_range as run_predict_range,
 )
 from application.state.predict_state import (
+    InvalidStateRangeError,
+    SensorPrediction,
     StateModelNotLoadedError,
     predict_state as run_predict_state,
+    predict_state_range as run_predict_state_range,
 )
 from infrastructure.config import Config
 from infrastructure.model_store import create_model_store
@@ -40,7 +43,14 @@ def root() -> dict:
     """Point d'entrée : liste les endpoints disponibles."""
     return {
         "service": "prediction",
-        "endpoints": ["/docs", "/health", "/predict", "/predict/range", "/predict/state"],
+        "endpoints": [
+            "/docs",
+            "/health",
+            "/predict",
+            "/predict/range",
+            "/predict/state",
+            "/predict/state/range",
+        ],
     }
 
 
@@ -170,8 +180,66 @@ def predict_state(
     return {
         "site_id": result.site_id,
         "target_timestamp": _format_iso8601(result.target_timestamp),
-        "sensors": result.sensors,
+        "sensors": _serialize_sensors(result.sensors),
         "model_version": result.model_version,
+    }
+
+
+@app.get(
+    "/predict/state/range",
+    tags=["Prediction"],
+    summary="Prédit l'état on/off des capteurs heure par heure",
+)
+def predict_state_range(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    start_time: str = Query(
+        ...,
+        description="Instant de départ au format ISO8601 (exclu, la 1re heure prédite est start_time + 1h), ex: 2026-09-17T08:00:00Z",
+    ),
+    hours: int = Query(
+        24,
+        ge=1,
+        le=24 * 7,
+        description="Nombre d'heures à prédire à partir de start_time (défaut 24, max 7 jours)",
+    ),
+) -> dict:
+    """Prédit l'état on/off de chaque capteur heure par heure, sur les
+    `hours` heures suivant `start_time` — un point par heure."""
+    parsed_start = _parse_iso8601(start_time)
+    if parsed_start is None:
+        raise HTTPException(status_code=422, detail="start_time must be ISO8601")
+
+    try:
+        result = run_predict_state_range(
+            model_store=create_model_store(),
+            model_name=Config.STATE_MODEL_NAME,
+            site_id=site_id,
+            start_time=parsed_start,
+            hours=hours,
+        )
+    except InvalidStateRangeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except StateModelNotLoadedError:
+        raise HTTPException(status_code=503, detail="state model not loaded")
+
+    return {
+        "site_id": result.site_id,
+        "hours": result.hours,
+        "model_version": result.model_version,
+        "points": [
+            {
+                "target_timestamp": _format_iso8601(point.target_timestamp),
+                "sensors": _serialize_sensors(point.sensors),
+            }
+            for point in result.points
+        ],
+    }
+
+
+def _serialize_sensors(sensors: dict[str, SensorPrediction]) -> dict[str, dict]:
+    return {
+        name: {"state": prediction.state, "confidence": prediction.confidence}
+        for name, prediction in sensors.items()
     }
 
 

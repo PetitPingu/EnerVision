@@ -7,6 +7,8 @@ se déduit du nombre de capteurs prédits off, voir
 application.state.predict_state.derive_state().
 """
 
+import numpy as np
+import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.multioutput import MultiOutputClassifier
@@ -48,3 +50,28 @@ def create_model_pipeline(
             ),
         ],
     )
+
+
+def predict_with_confidence(pipeline: Pipeline, x: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Prédit l'état on/off de chaque capteur (0/1) et la confiance du
+    modèle dans cette prédiction (probabilité de la classe prédite, entre
+    0 et 1 — pas un intervalle de confiance statistique).
+
+    Retourne deux tableaux de forme (n_samples, n_sensors). Un capteur qui
+    n'a jamais été vu "off" à l'entraînement n'a qu'une classe côté
+    RandomForestClassifier : sa confiance est alors 1.0 par construction
+    (le modèle n'a jamais eu l'occasion d'hésiter).
+    """
+    predictions = np.asarray(pipeline.predict(x))
+    proba_per_sensor = pipeline.predict_proba(x)
+    estimators = pipeline.named_steps["model"].estimators_
+
+    confidences = np.ones_like(predictions, dtype=float)
+    for sensor_index, (estimator, proba) in enumerate(zip(estimators, proba_per_sensor)):
+        classes = list(estimator.classes_)
+        for row_index in range(predictions.shape[0]):
+            predicted_class = predictions[row_index, sensor_index]
+            if predicted_class in classes:
+                confidences[row_index, sensor_index] = proba[row_index, classes.index(predicted_class)]
+
+    return predictions, confidences

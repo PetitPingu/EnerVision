@@ -20,3 +20,5 @@ export const ALERTS_ACTIVE_ENDPOINT = "/api/v1/alerts/active";
 export const SENSORS_STATUS_ENDPOINT = "/api/v1/sensors/status";
 
 export const PREDICTIONS_SENSORS_ENDPOINT = "/api/v1/predictions/sensors";
+
+export const PREDICTIONS_SENSORS_RANGE_ENDPOINT = "/api/v1/predictions/sensors/range";
