@@ -6,6 +6,32 @@ locals {
   repo_root_path        = abspath("${path.module}/..")
   database_url          = "postgresql+psycopg://${var.db_user}:${var.db_password}@postgres:5432/${var.db_name}"
   dashboard_api_bff_url = coalesce(var.dashboard_api_bff_url, "http://${var.host}:${var.core_api_port}")
+
+  # filemd5/requirements.txt seuls ne suffisent pas à détecter un changement
+  # de code applicatif (cf. incident : etl_worker resté sur une image d'avant
+  # le job de monitoring, requirements.txt inchangé -> jamais rebuild par
+  # Terraform malgré plusieurs `terraform apply` après le merge). On hashe
+  # tout l'arbre source de chaque service (et packages/db-schema, dont
+  # dépendent core_api/prediction/recommendation/etl_worker) pour que tout
+  # changement de code déclenche bien un rebuild.
+  db_schema_source_hash = sha1(join("", [
+    for f in sort(fileset(local.repo_root_path, "packages/db-schema/**")) : filemd5("${local.repo_root_path}/${f}")
+  ]))
+  core_api_source_hash = sha1(join("", [
+    for f in sort(fileset(local.repo_root_path, "apps/core_api/**")) : filemd5("${local.repo_root_path}/${f}")
+  ]))
+  prediction_source_hash = sha1(join("", [
+    for f in sort(fileset(local.repo_root_path, "apps/prediction/**")) : filemd5("${local.repo_root_path}/${f}")
+  ]))
+  recommendation_source_hash = sha1(join("", [
+    for f in sort(fileset(local.repo_root_path, "apps/recommendation/**")) : filemd5("${local.repo_root_path}/${f}")
+  ]))
+  etl_worker_source_hash = sha1(join("", [
+    for f in sort(fileset(local.repo_root_path, "apps/etl_worker/**")) : filemd5("${local.repo_root_path}/${f}")
+  ]))
+  dashboard_source_hash = sha1(join("", [
+    for f in sort(fileset(local.repo_root_path, "apps/dashboard/src/**")) : filemd5("${local.repo_root_path}/${f}")
+  ]))
 }
 
 resource "terraform_data" "build_mlflow" {
@@ -24,8 +50,8 @@ resource "terraform_data" "build_mlflow" {
 resource "terraform_data" "build_core_api" {
   input = join(",", [
     filemd5("${path.module}/../apps/core_api/Dockerfile"),
-    filemd5("${path.module}/../apps/core_api/requirements.txt"),
-    filemd5("${path.module}/../packages/db-schema/wait-for-postgres.sh"),
+    local.core_api_source_hash,
+    local.db_schema_source_hash,
   ])
 
   provisioner "local-exec" {
@@ -37,7 +63,8 @@ resource "terraform_data" "build_core_api" {
 resource "terraform_data" "build_prediction" {
   input = join(",", [
     filemd5("${path.module}/../apps/prediction/Dockerfile"),
-    filemd5("${path.module}/../apps/prediction/requirements.txt"),
+    local.prediction_source_hash,
+    local.db_schema_source_hash,
   ])
 
   provisioner "local-exec" {
@@ -49,8 +76,8 @@ resource "terraform_data" "build_prediction" {
 resource "terraform_data" "build_recommendation" {
   input = join(",", [
     filemd5("${path.module}/../apps/recommendation/Dockerfile"),
-    filemd5("${path.module}/../apps/recommendation/requirements.txt"),
-    filemd5("${path.module}/../packages/db-schema/wait-for-postgres.sh"),
+    local.recommendation_source_hash,
+    local.db_schema_source_hash,
   ])
 
   provisioner "local-exec" {
@@ -62,7 +89,8 @@ resource "terraform_data" "build_recommendation" {
 resource "terraform_data" "build_etl_worker" {
   input = join(",", [
     filemd5("${path.module}/../apps/etl_worker/Dockerfile"),
-    filemd5("${path.module}/../apps/etl_worker/requirements.txt"),
+    local.etl_worker_source_hash,
+    local.db_schema_source_hash,
   ])
 
   provisioner "local-exec" {
@@ -75,6 +103,7 @@ resource "terraform_data" "build_dashboard" {
   input = join(",", [
     filemd5("${path.module}/../apps/dashboard/Dockerfile"),
     filemd5("${path.module}/../apps/dashboard/package-lock.json"),
+    local.dashboard_source_hash,
     local.dashboard_api_bff_url,
   ])
 
