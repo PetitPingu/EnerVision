@@ -129,7 +129,18 @@ def _predict_sensors(
             f"Le modele '{model_name}' est un ancien modele, un reentrainement est necessaire"
         )
 
-    predictions, confidences = predict_with_confidence(pipeline, x)
+    try:
+        predictions, confidences = predict_with_confidence(pipeline, x)
+    except Exception as exc:
+        # Ex. un modèle entraîné avant un changement de features (schéma
+        # different de FEATURE_COLUMNS, comme l'ancien "minute" retiré par
+        # aggregate_hourly) : incompatible avec le code actuel, pas un
+        # 500 - un réentraînement le remplacera.
+        raise StateModelNotLoadedError(
+            f"Le modele '{model_name}' est incompatible avec le code actuel, "
+            "un reentrainement est necessaire"
+        ) from exc
+
     if predictions.ndim != 2 or predictions.shape[1] != len(SENSOR_COLUMNS):
         raise StateModelNotLoadedError(
             f"Le modele '{model_name}' est un ancien modele, un reentrainement est necessaire"

@@ -99,6 +99,64 @@ def test_predict_state_range_rejects_invalid_hours():
         )
 
 
+def test_predict_state_raises_when_model_expects_a_removed_feature():
+    # Modèle entraîné avant le retrait de "minute" (aggregate_hourly) :
+    # son ColumnTransformer interne attend une colonne que le code actuel
+    # ne fournit plus. Doit être traité comme un modèle à réentraîner
+    # (503), pas planter (500) - voir predict_state.py, _predict_sensors.
+    import pandas as pd
+    from sklearn.compose import ColumnTransformer
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.multioutput import MultiOutputClassifier
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import OneHotEncoder
+
+    from application.ports import SavedModelMetadata
+
+    # Reproduit la forme d'un pipeline entraîné avant le retrait de
+    # "minute" (create_model_pipeline() reflète déjà le nouveau schéma,
+    # on ne peut pas l'utiliser pour simuler l'ancien).
+    old_pipeline = Pipeline(
+        steps=[
+            (
+                "preprocessor",
+                ColumnTransformer(
+                    transformers=[
+                        ("cat", OneHotEncoder(handle_unknown="ignore"), ["site_id"]),
+                        ("num", "passthrough", ["hour", "minute"]),
+                    ],
+                ),
+            ),
+            ("model", MultiOutputClassifier(RandomForestClassifier(random_state=42))),
+        ],
+    )
+    old_x = pd.DataFrame(
+        {"site_id": ["SITE001", "SITE002"], "hour": [10, 11], "minute": [0, 30]}
+    )
+    old_sensors = pd.DataFrame({name: [1, 0] for name in SENSOR_COLUMNS})
+    old_pipeline.fit(old_x, old_sensors.to_numpy())
+
+    class FakeStore:
+        def load_latest(self, model_name):
+            metadata = SavedModelMetadata(
+                model_name=model_name,
+                trained_at="2026-09-01T00-00-00Z",
+                metrics={"accuracy": 0.9},
+                train_size=2,
+                test_size=1,
+                features=("site_id", "hour", "minute"),
+            )
+            return old_pipeline, metadata
+
+    with pytest.raises(StateModelNotLoadedError):
+        predict_state(
+            model_store=FakeStore(),
+            model_name="sensor-state-model",
+            site_id="SITE001",
+            target_timestamp=datetime(2026, 9, 17, 14, 30, tzinfo=timezone.utc),
+        )
+
+
 def test_predict_state_raises_when_model_unavailable():
     class BrokenStore:
         def save(self, pipeline, metadata):
