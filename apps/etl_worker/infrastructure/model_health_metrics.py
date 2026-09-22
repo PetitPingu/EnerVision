@@ -35,7 +35,9 @@ ml_feature_drift_score = Gauge(
 ml_model_version = Gauge(
     "ml_model_version",
     "Date d'entraînement (trained_at) de la version de modèle actuellement "
-    "observée sur un site, en epoch millisecondes.",
+    "observée sur un site, en epoch secondes (Grafana : field unit "
+    "dateTimeAsIso attend des secondes, pas des millisecondes, vérifié "
+    "empiriquement).",
     ["site"],
 )
 
@@ -86,7 +88,7 @@ def publish_model_health(
         if trained_at is None:
             logger.warning("model_version illisible pour %s : %r", site, version)
             continue
-        ml_model_version.labels(site=site).set(trained_at.timestamp() * 1000)
+        ml_model_version.labels(site=site).set(trained_at.timestamp())
 
     for site, mae_by_bucket in (mae_by_horizon_by_site or {}).items():
         for bucket, mae in mae_by_bucket.items():
