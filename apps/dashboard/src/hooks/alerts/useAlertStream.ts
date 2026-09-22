@@ -80,6 +80,20 @@ export function useAlertStream(): UseAlertStreamResult {
   }
 
   useEffect(() => {
+    // /api/v1/alerts/stream n'exige pas de JWT (EventSource ne permet pas
+    // d'attacher un header Authorization) et n'est pas filtré par site : on
+    // n'ouvre donc la connexion qu'une fois authentifié pour ne rien exposer
+    // avant login. Idem pour le localStorage, qui peut contenir l'état d'une
+    // session précédente : on l'efface tant que non connecté, et à la
+    // déconnexion (passage à false, cleanup ci-dessous ferme l'EventSource).
+    if (!isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveBySite({});
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setToasts([]);
+      return;
+    }
+
     // Lecture ponctuelle d'un système externe (localStorage) au montage,
     // volontairement après le rendu SSR pour éviter un mismatch d'hydratation.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -88,35 +102,29 @@ export function useAlertStream(): UseAlertStreamResult {
     const url = `${process.env.NEXT_PUBLIC_API_BFF_URL}${ALERTS_STREAM_ENDPOINT}`;
     const source = new EventSource(url);
 
-    // /api/v1/alerts/active exige un JWT (voir presentation/api.py) : avant
-    // la connexion, cet appel échouerait (401) — il est retenté quand
-    // isAuthenticated passe à true (voir la dépendance de cet effet).
-    //
     // N'ajoute que les sites du snapshot absents de l'état courant : ne
     // jamais écraser une entrée déjà connue (localStorage, ou déjà mise à
     // jour entre-temps par un événement live reçu pendant que ce fetch
     // était en cours) — évite toute course avec le flux temps réel.
-    if (isAuthenticated) {
-      getActiveAlerts()
-        .then((snapshot) => {
-          setActiveBySite((prev) => {
-            const next = { ...prev };
-            let changed = false;
-            for (const alert of snapshot) {
-              if (!next[alert.site_id]) {
-                next[alert.site_id] = { ...alert, read: false, resolved: false, resolvedAt: null };
-                changed = true;
-              }
+    getActiveAlerts()
+      .then((snapshot) => {
+        setActiveBySite((prev) => {
+          const next = { ...prev };
+          let changed = false;
+          for (const alert of snapshot) {
+            if (!next[alert.site_id]) {
+              next[alert.site_id] = { ...alert, read: false, resolved: false, resolvedAt: null };
+              changed = true;
             }
-            if (changed) saveStored(next);
-            return changed ? next : prev;
-          });
-        })
-        .catch(() => {
-          // Snapshot indisponible (core_api ou Postgres down) : le flux SSE
-          // prendra quand même le relais pour les prochaines transitions.
+          }
+          if (changed) saveStored(next);
+          return changed ? next : prev;
         });
-    }
+      })
+      .catch(() => {
+        // Snapshot indisponible (core_api ou Postgres down) : le flux SSE
+        // prendra quand même le relais pour les prochaines transitions.
+      });
 
     function handleAlert(event: MessageEvent<string>) {
       const alertEvent: AlertEvent = JSON.parse(event.data);

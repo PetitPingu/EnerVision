@@ -98,7 +98,7 @@ export function TopHeader() {
       </div>
 
       <div className="flex items-center gap-3">
-        <NotificationBell />
+        {isAuthenticated && <NotificationBell />}
         {isAuthenticated && email ? <UserMenu email={email} /> : <LoginButton />}
       </div>
     </header>
