@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from infrastructure.active_alerts_reader import PostgresActiveAlertsReader
+from infrastructure.latest_readings_reader import PostgresLatestReadingsReader
 from infrastructure.api_client import ApiMockClient
 from infrastructure.auth import (
     create_access_token,
@@ -34,7 +35,7 @@ from infrastructure.config import Config
 from infrastructure.login_throttle import is_locked_out, record_failed_attempt, reset_attempts
 from infrastructure.model_health_client import ModelHealthClient
 from infrastructure.password_policy import WeakPasswordError, validate_password_strength
-from infrastructure.prediction_client import PredictionApiClient
+from infrastructure.prediction_client import PredictionApiClient, PredictionModelNotLoadedError
 from infrastructure.recommendation_client import RecommendationApiClient
 from infrastructure.redis_alert_stream import RedisAlertStreamReader
 from infrastructure.site_access_repository import SqlSiteAccessRepository
@@ -48,6 +49,7 @@ DRIFT_CRITICAL_THRESHOLD = 2.0
 
 alert_stream = RedisAlertStreamReader()
 active_alerts_reader = PostgresActiveAlertsReader()
+latest_readings_reader = PostgresLatestReadingsReader()
 
 
 @asynccontextmanager
@@ -179,11 +181,14 @@ def root() -> dict:
             "/api/v1/sites",
             "/api/v1/sites/{site_id}/current",
             "/api/v1/readings",
+            "/api/v1/readings/latest",
             "/api/v1/alerts",
             "/api/v1/alerts/stream",
             "/api/v1/alerts/active",
             "/api/v1/sensors/status",
             "/api/v1/predictions/range",
+            "/api/v1/predictions/sensors",
+            "/api/v1/predictions/sensors/range",
             "/api/v1/recommendations",
             "/api/v1/model-health/drift",
         ]
@@ -320,6 +325,27 @@ def list_active_alerts(current_user: CurrentUser = Depends(require_auth)) -> lis
     return [_alert_event_dict(e) for e in events]
 
 
+@app.get(
+    "/api/v1/readings/latest",
+    tags=["Readings"],
+    summary="Dernière lecture connue de chaque site (notre base, pas l'API mock)",
+)
+def list_latest_readings(current_user: CurrentUser = Depends(require_auth)) -> list:
+    """Dernière lecture de readings_curated pour chaque site, toutes
+    qualités confondues (good compris, contrairement à /api/v1/alerts/active).
+
+    Contrairement à GET /api/v1/sites/{site_id}/current (relais direct de
+    l'API mock), c'est ce qu'etl_worker a réellement ingéré et stocké —
+    utilisé pour l'état des capteurs affiché dans le dashboard (SiteCard,
+    SiteSensorsModal), cohérent avec ce que le modèle d'état apprend.
+    """
+    permitted = _permitted_site_ids(current_user)
+    readings = latest_readings_reader.get_latest()
+    if permitted is not None:
+        readings = [r for r in readings if r.site_id in permitted]
+    return [asdict(r) for r in readings]
+
+
 def _alert_event_dict(event: AlertEvent) -> dict:
     """dataclasses.asdict() ignore les propriétés calculées : kind est ajouté
     à la main pour que le front le reçoive sans le recalculer lui-même."""
@@ -408,6 +434,71 @@ def list_predictions_range(
     result = prediction_api.get_prediction_range(
         site_id=site_id, start_time=start_time, end_time=end_time, interval=interval
     )
+    if result is None:
+        raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
+    return result
+
+
+@app.get(
+    "/api/v1/predictions/sensors",
+    tags=["Predictions"],
+    summary="État on/off prédit des capteurs d'un site",
+)
+def predict_sensors_state(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    timestamp: str = Query(
+        ...,
+        description="Horodatage cible au format ISO 8601, ex: 2026-09-17T14:30:00Z",
+    ),
+    current_user: CurrentUser = Depends(require_auth),
+) -> dict:
+    """Relaie GET /predict/state du service prediction : état on/off prédit
+    pour chacun des 6 capteurs du site à l'instant demandé (pas d'état
+    global déduit, voir apps/prediction/docs/state-model.md)."""
+    _assert_site_access(current_user, site_id)
+    try:
+        result = prediction_api.get_sensor_state(site_id=site_id, timestamp=timestamp)
+    except PredictionModelNotLoadedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Aucun modèle d'état des capteurs n'a encore été entraîné",
+        )
+    if result is None:
+        raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
+    return result
+
+
+@app.get(
+    "/api/v1/predictions/sensors/range",
+    tags=["Predictions"],
+    summary="État on/off prédit des capteurs d'un site, heure par heure",
+)
+def predict_sensors_state_range(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    start_time: str = Query(
+        ...,
+        description="Instant de départ au format ISO 8601 (exclu, la 1re heure prédite est start_time + 1h), ex: 2026-09-17T08:00:00Z",
+    ),
+    hours: int = Query(
+        24,
+        ge=1,
+        le=24 * 7,
+        description="Nombre d'heures à prédire à partir de start_time (défaut 24, max 7 jours)",
+    ),
+    current_user: CurrentUser = Depends(require_auth),
+) -> dict:
+    """Relaie GET /predict/state/range du service prediction : état on/off
+    + confiance, un point par heure sur `hours` heures."""
+    _assert_site_access(current_user, site_id)
+    try:
+        result = prediction_api.get_sensor_state_range(
+            site_id=site_id, start_time=start_time, hours=hours
+        )
+    except PredictionModelNotLoadedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Aucun modèle d'état des capteurs n'a encore été entraîné",
+        )
     if result is None:
         raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
     return result

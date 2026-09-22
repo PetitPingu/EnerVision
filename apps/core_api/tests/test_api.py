@@ -6,6 +6,7 @@ from domain.entities import Alert, AlertEvent, Reading, Site
 from fastapi.testclient import TestClient
 from presentation import api
 from presentation.api import _sse_alert_events
+from infrastructure.prediction_client import PredictionModelNotLoadedError
 
 SITES = [Site(site_id="SITE001", site_name="Bureau Paris")]
 READINGS = [Reading(site_id="SITE001", timestamp="2024-06-15T14:32:00.123456", data_quality="good")]
@@ -23,6 +24,7 @@ def _client(
     current_reading=_UNSET,
     sensors_status=None,
     recommendations=_UNSET,
+    mock_prediction_api=None,
 ):
     mock_api = Mock()
     mock_api.get_sites.return_value = sites if sites is not None else SITES
@@ -41,6 +43,9 @@ def _client(
         [] if recommendations is _UNSET else recommendations
     )
     monkeypatch.setattr(api, "recommendation_api", mock_recommendation_api)
+
+    if mock_prediction_api is not None:
+        monkeypatch.setattr(api, "prediction_api", mock_prediction_api)
 
     # Ces tests portent sur la logique métier des routes, pas sur l'auth ni
     # le filtrage par site (voir tests/test_auth.py et test_admin.py) : on
@@ -164,6 +169,56 @@ def test_active_alerts_relays_active_alerts_reader(monkeypatch):
         }
     ]
     mock_reader.get_active.assert_called_once()
+
+
+def test_latest_readings_relays_latest_readings_reader(monkeypatch):
+    reading = Reading(
+        site_id="SITE001",
+        timestamp="2026-09-22T10:00:00",
+        site_type="office",
+        consumption_kw=120.5,
+        consumption_kwh=120.5,
+        voltage_v=None,
+        current_a=None,
+        power_factor=None,
+        temperature_celsius=21.0,
+        humidity_percent=45.0,
+        null_reasons=["electrical_sensor_failure"],
+        data_quality="degraded",
+    )
+    mock_reader = Mock()
+    mock_reader.get_latest.return_value = [reading]
+    monkeypatch.setattr(api, "latest_readings_reader", mock_reader)
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/readings/latest")
+
+    assert response.status_code == 200
+    assert response.json() == [asdict(reading)]
+    mock_reader.get_latest.assert_called_once()
+
+
+def test_latest_readings_filters_by_site_access(monkeypatch):
+    reading = Reading(site_id="SITE002", timestamp="2026-09-22T10:00:00")
+    mock_reader = Mock()
+    mock_reader.get_latest.return_value = [reading]
+    monkeypatch.setattr(api, "latest_readings_reader", mock_reader)
+    client, _, _ = _client(monkeypatch)
+    monkeypatch.setitem(
+        api.app.dependency_overrides,
+        api.require_auth,
+        lambda: api.CurrentUser(email="viewer@example.com", role="viewer", user_id="u1"),
+    )
+    monkeypatch.setattr(
+        api,
+        "site_access_repository",
+        Mock(get_site_ids=Mock(return_value=["SITE001"])),
+    )
+
+    response = client.get("/api/v1/readings/latest")
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_active_alerts_serializes_partial_as_minor_alert_kind(monkeypatch):
@@ -340,3 +395,122 @@ def test_alerts_stream_route_returns_sse_content_type(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
+
+
+def test_predictions_sensors_relays_prediction_api_client(monkeypatch):
+    payload = {
+        "site_id": "SITE001",
+        "target_timestamp": "2026-09-17T14:30:00Z",
+        "sensors": {"voltage_v": "on", "humidity_percent": "off"},
+        "model_version": "2026-09-16T14-30-00Z",
+    }
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state.return_value = payload
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors",
+        params={"site_id": "SITE001", "timestamp": "2026-09-17T14:30:00Z"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    mock_prediction_api.get_sensor_state.assert_called_once_with(
+        site_id="SITE001", timestamp="2026-09-17T14:30:00Z"
+    )
+
+
+def test_predictions_sensors_returns_502_when_service_unavailable(monkeypatch):
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state.return_value = None
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors",
+        params={"site_id": "SITE001", "timestamp": "2026-09-17T14:30:00Z"},
+    )
+
+    assert response.status_code == 502
+
+
+def test_predictions_sensors_returns_503_when_model_not_loaded(monkeypatch):
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state.side_effect = PredictionModelNotLoadedError()
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors",
+        params={"site_id": "SITE001", "timestamp": "2026-09-17T14:30:00Z"},
+    )
+
+    assert response.status_code == 503
+
+
+def test_predictions_sensors_requires_timestamp(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/predictions/sensors", params={"site_id": "SITE001"})
+
+    assert response.status_code == 422
+
+
+def test_predictions_sensors_range_relays_prediction_api_client(monkeypatch):
+    payload = {
+        "site_id": "SITE001",
+        "hours": 24,
+        "model_version": "2026-09-16T14-30-00Z",
+        "points": [
+            {
+                "target_timestamp": "2026-09-17T11:00:00Z",
+                "sensors": {"voltage_v": {"state": "on", "confidence": 0.9}},
+            }
+        ],
+    }
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state_range.return_value = payload
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z", "hours": 24},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == payload
+    mock_prediction_api.get_sensor_state_range.assert_called_once_with(
+        site_id="SITE001", start_time="2026-09-17T10:00:00Z", hours=24
+    )
+
+
+def test_predictions_sensors_range_returns_502_when_service_unavailable(monkeypatch):
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state_range.return_value = None
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z"},
+    )
+
+    assert response.status_code == 502
+
+
+def test_predictions_sensors_range_returns_503_when_model_not_loaded(monkeypatch):
+    mock_prediction_api = Mock()
+    mock_prediction_api.get_sensor_state_range.side_effect = PredictionModelNotLoadedError()
+    client, _, _ = _client(monkeypatch, mock_prediction_api=mock_prediction_api)
+
+    response = client.get(
+        "/api/v1/predictions/sensors/range",
+        params={"site_id": "SITE001", "start_time": "2026-09-17T10:00:00Z"},
+    )
+
+    assert response.status_code == 503
+
+
+def test_predictions_sensors_range_requires_start_time(monkeypatch):
+    client, _, _ = _client(monkeypatch)
+
+    response = client.get("/api/v1/predictions/sensors/range", params={"site_id": "SITE001"})
+
+    assert response.status_code == 422

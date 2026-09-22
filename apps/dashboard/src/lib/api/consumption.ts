@@ -1,4 +1,4 @@
-import { READINGS_ENDPOINT, READINGS_LIMIT } from "@/config/api";
+import { READINGS_ENDPOINT, READINGS_LATEST_ENDPOINT, READINGS_LIMIT } from "@/config/api";
 import { apiClient } from "@/lib/api/client";
 import type { ConsumptionReading, DataQuality } from "@/types/consumption";
 
@@ -37,5 +37,13 @@ export async function getConsumptionReadings(
     },
   );
 
+  return data.map(mapReading);
+}
+
+/** Relaie GET /api/v1/readings/latest : dernière lecture connue de chaque
+ * site, depuis notre base (readings_curated) — pas un relais de l'API mock
+ * (contrairement à un éventuel appel "current" par site). */
+export async function getLatestReadings(): Promise<ConsumptionReading[]> {
+  const { data } = await apiClient.get<ApiConsumptionReading[]>(READINGS_LATEST_ENDPOINT);
   return data.map(mapReading);
 }

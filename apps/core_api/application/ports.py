@@ -101,3 +101,15 @@ class ActiveAlertsPort(ABC):
     def get_active(self) -> list[AlertEvent]:
         """Snapshot des sites actuellement partial/degraded/critical (dernière
         lecture connue par site). Retourne [] si la source est indisponible."""
+
+
+class LatestReadingsPort(ABC):
+    """Dernière lecture connue par site, lue dans notre base (readings_curated) —
+    pas un relais à l'API mock (contrairement à SensorApiPort.get_current_reading,
+    qui interroge l'API mock en direct)."""
+
+    @abstractmethod
+    def get_latest(self) -> list[Reading]:
+        """Dernière lecture de chaque site, toutes qualités confondues
+        (good compris, contrairement à ActiveAlertsPort). Retourne [] si la
+        source est indisponible."""

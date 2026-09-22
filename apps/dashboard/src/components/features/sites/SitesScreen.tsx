@@ -1,10 +1,11 @@
 "use client";
 
 import { EmptyState } from "@/components/EmptyState";
-import { computeSeverity, SiteCard } from "@/components/features/sites/SiteCard";
+import { SiteCard } from "@/components/features/sites/SiteCard";
 import { SitesSummaryCards } from "@/components/features/sites/SitesSummaryCards";
 import { useSiteSelection } from "@/contexts/SiteSelectionContext";
-import { useSensorsStatus } from "@/hooks/sites/useSensorsStatus";
+import { useLatestReadings } from "@/hooks/sites/useLatestReadings";
+import { deriveSensorCategoryStatus } from "@/lib/format/sensorCategory";
 
 function formatUpdatedAt(date: Date): string {
   return date.toLocaleTimeString("fr-FR", {
@@ -16,27 +17,26 @@ function formatUpdatedAt(date: Date): string {
 
 export function SitesScreen() {
   const { sites, isLoading: isSitesLoading, error: sitesError } = useSiteSelection();
-  const {
-    data: sensorsStatus,
-    isLoading: isStatusLoading,
-    lastUpdatedAt,
-  } = useSensorsStatus();
+  const { data: latestReadings, isLoading: isReadingsLoading, lastUpdatedAt } =
+    useLatestReadings();
 
-  const isLoading = isSitesLoading || isStatusLoading;
+  const isLoading = isSitesLoading || isReadingsLoading;
 
-  let partielCount = 0;
-  let degradeCount = 0;
-  let critiqueCount = 0;
+  // Total on/off des capteurs, tous sites confondus, dérivé de notre base
+  // (readings_curated) — pas un mélange de compteurs de nature différente
+  // (capteurs vs sites, voir historique de ce composant).
+  let sensorsOnCount = 0;
+  let sensorsOffCount = 0;
 
   for (const site of sites) {
-    const severity = computeSeverity(sensorsStatus[site.site_id]);
-    const failingSensors = Object.values(
-      sensorsStatus[site.site_id]?.sensors ?? {},
-    ).filter((sensor) => sensor.status === "failing").length;
-
-    partielCount += failingSensors;
-    if (severity.degrade) degradeCount += 1;
-    if (severity.critique) critiqueCount += 1;
+    const categoryStatus = deriveSensorCategoryStatus(latestReadings[site.site_id] ?? null);
+    for (const status of Object.values(categoryStatus)) {
+      if (status === "failing") {
+        sensorsOffCount += 1;
+      } else {
+        sensorsOnCount += 1;
+      }
+    }
   }
 
   return (
@@ -64,9 +64,8 @@ export function SitesScreen() {
       ) : (
         <SitesSummaryCards
           sitesCount={sites.length}
-          partielCount={partielCount}
-          degradeCount={degradeCount}
-          critiqueCount={critiqueCount}
+          sensorsOnCount={sensorsOnCount}
+          sensorsOffCount={sensorsOffCount}
         />
       )}
 
@@ -85,7 +84,7 @@ export function SitesScreen() {
               <SiteCard
                 key={site.site_id}
                 site={site}
-                status={sensorsStatus[site.site_id]}
+                reading={latestReadings[site.site_id]}
               />
             ))}
           </div>

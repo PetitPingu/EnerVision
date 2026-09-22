@@ -39,4 +39,4 @@ def test_train_and_publish_state_calls_model_store(monkeypatch):
     assert result.object_prefix == "sensor-state-model/2026-09-16T14-30-00Z"
     assert 0.0 <= result.training.accuracy <= 1.0
     assert saved_metadata.metrics["accuracy"] == result.training.accuracy
-    assert saved_metadata.features == ("site_id", "hour", "minute")
+    assert saved_metadata.features == ("site_id", "hour")
