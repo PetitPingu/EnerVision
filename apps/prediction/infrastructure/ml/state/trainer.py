@@ -1,8 +1,9 @@
 """Entraînement du modèle d'état on/off des capteurs.
 
-Orchestre state_features.build_features() / build_sensor_targets(), le split
-train/test et l'évaluation du pipeline. Les métriques portent sur l'état
-on/off de chaque capteur (accuracy + F1 macro, ce dernier adapté au
+Agrège d'abord les lectures minute par minute à l'heure (aggregate_hourly),
+puis orchestre state_features.build_features() / build_sensor_targets(), le
+split train/test et l'évaluation du pipeline. Les métriques portent sur
+l'état on/off de chaque capteur (accuracy + F1 macro, ce dernier adapté au
 déséquilibre : un capteur est presque toujours "on").
 """
 
@@ -13,7 +14,11 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
-from infrastructure.ml.state.features import build_features, build_sensor_targets
+from infrastructure.ml.state.features import (
+    aggregate_hourly,
+    build_features,
+    build_sensor_targets,
+)
 from infrastructure.ml.state.pipeline import create_model_pipeline
 
 
@@ -36,8 +41,9 @@ def train_model(
 ) -> StateTrainingResult:
     """Entraîne le pipeline sur df et retourne le modèle + métriques
     (accuracy, F1 macro)."""
-    x, y = build_features(df)
-    sensors = build_sensor_targets(df)
+    hourly = aggregate_hourly(df)
+    x, y = build_features(hourly)
+    sensors = build_sensor_targets(hourly)
 
     # Stratifié sur data_quality (pas sur les capteurs) pour garder les états
     # rares, donc les pannes, dans le jeu de test.

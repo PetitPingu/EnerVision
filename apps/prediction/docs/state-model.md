@@ -17,13 +17,26 @@ Chaque ligne de `readings_curated` porte 6 mesures (`consumption_kw`,
 
 | | Contenu |
 |---|---|
-| **Entrées (features)** | `site_id`, heure, minute |
+| **Entrées (features)** | `site_id`, heure (pas la minute) |
 | **Sorties (cibles)** | 6 états on/off, un par capteur (`SENSOR_COLUMNS`) |
 | **Algorithme** | `MultiOutputClassifier(RandomForestClassifier)` |
 
 Le modèle apprend des habitudes du type « ce site perd souvent l'humidité
 vers 11 h ». Il ne voit ni la météo ni l'état des capteurs juste avant : il
 prédit à partir du site et de l'heure uniquement.
+
+### Agrégation horaire (`aggregate_hourly`)
+
+`readings_curated` contient une lecture par site et par **minute**. À ce
+grain, une panne est un événement quasi unique — une seule ligne par site
+et par minute dans tout l'historique, jamais revue au même instant — donc
+rien à apprendre, seulement du bruit. `train_model()` agrège d'abord les
+lectures en buckets **(site, heure)** avant `build_features`/
+`build_sensor_targets` : un capteur est `off` sur ce bucket si au moins
+`MIN_OFF_READINGS_PER_HOUR` (2 par défaut) lectures de l'heure l'ont vu
+`off`, `on` sinon. Le seuil (pas juste « au moins une fois ») écarte aussi
+les anomalies isolées d'une seule lecture. C'est aussi le grain que
+`/predict/state/range` expose déjà (un point par heure).
 
 ## Pourquoi un second modèle plutôt qu'étendre le premier ?
 
@@ -128,7 +141,8 @@ sequenceDiagram
     loop Toutes les 24h
         Cron->>Pred: _run_scheduled_retrain_state()
         Pred->>PG: SELECT site_id, timestamp, data_quality + 6 mesures capteurs
-        PG-->>Pred: Lectures curées (pas de filtre consumption_kwh)
+        PG-->>Pred: Lectures curées, une par site et par minute
+        Pred->>Pred: aggregate_hourly() — regroupe en buckets (site, heure)
         Pred->>Pred: train_model() — MultiOutputClassifier(RandomForest),<br/>accuracy + F1 macro on/off sur le test set
         Pred->>MLflow: register() — log_params/log_metrics + log_model<br/>(nouvelle version "sensor-state-model", alias non déplacé)
         MLflow->>MinIO: Stocke l'artifact du modèle
@@ -159,7 +173,7 @@ sequenceDiagram
     Pred->>MLflow: load_latest("sensor-state-model")
     alt Modèle disponible
         MLflow-->>Pred: pipeline + metadata (accuracy, f1_macro, trained_at)
-        Pred->>Pred: predict(site_id, hour, minute) → 6 états on/off
+        Pred->>Pred: predict(site_id, hour) → 6 états on/off
         Pred-->>Core: 200 OK {sensors: {capteur: on|off}, model_version}
         Core-->>Client: 200 OK
     else Aucun modèle promu
@@ -186,6 +200,14 @@ MLflow (`mlflow.log_metrics(metadata.metrics)`).
 - **Pannes rares** (environ 7 % des mesures par capteur) : un modèle qui
   répondrait toujours `on` aurait une bonne accuracy, d'où le suivi du F1
   macro. La promotion se fait pour l'instant sur l'accuracy.
+- **Granularité minute trop fine pour apprendre quoi que ce soit** : sans
+  `aggregate_hourly`, chaque panne est un événement unique (une ligne par
+  site et par minute, jamais revue), donc pure coïncidence plutôt qu'un
+  motif généralisable — d'où l'agrégation à l'heure.
+- **Pannes potentiellement aléatoires** : si le générateur de données ne
+  corrèle pas vraiment les pannes à l'heure (ni à rien d'observable), même
+  agrégées, elles restent en grande partie imprévisibles ; aucun modèle ne
+  peut faire mieux que deviner face à du vrai bruit.
 - **Ancien modèle** : un modèle enregistré avant ce changement prédisait un
   état global. `predict_state()` le refuse (503) tant qu'un ré-entraînement
   n'a pas promu un modèle par capteur.

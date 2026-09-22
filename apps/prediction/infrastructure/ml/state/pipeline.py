@@ -2,9 +2,8 @@
 
 Assemble le preprocessing (encodage de site_id) et un classifieur
 multi-sorties : une sortie (1 = on, 0 = off) par colonne de SENSOR_COLUMNS.
-L'état global du site (good/partial/degraded/critical) n'est pas appris : il
-se déduit du nombre de capteurs prédits off, voir
-application.state.predict_state.derive_state().
+Pas d'état global du site appris : c'est le front qui affiche chaque
+capteur individuellement, voir apps/prediction/docs/state-model.md.
 """
 
 import numpy as np
@@ -16,7 +15,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 CATEGORICAL_FEATURES = ["site_id"]
-NUMERIC_FEATURES = ["hour", "minute"]
+NUMERIC_FEATURES = ["hour"]
 
 
 def create_model_pipeline(

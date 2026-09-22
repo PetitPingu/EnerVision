@@ -165,13 +165,13 @@ def _build_prediction_input(
     site_id: str,
     target_timestamps: tuple[datetime, ...],
 ) -> pd.DataFrame:
-    """Construit les features attendues par le pipeline sklearn."""
+    """Construit les features attendues par le pipeline sklearn (site_id +
+    heure seulement, voir aggregate_hourly côté entraînement)."""
     return pd.DataFrame(
         [
             {
                 "site_id": site_id,
                 "hour": ts.hour,
-                "minute": ts.minute,
             }
             for ts in target_timestamps
         ],
