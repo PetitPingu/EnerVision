@@ -1,0 +1,4 @@
+# Dépendance isolée de requirements-dev.txt (pytest) : le test de charge ne
+# tourne ni en local pour un dev lambda ni sur chaque CI, seulement à la
+# demande ou en nightly (voir .github/workflows/load-test.yml).
+locust>=2.31

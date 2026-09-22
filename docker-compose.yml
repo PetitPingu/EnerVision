@@ -1,0 +1,406 @@
+services:
+  traefik:
+    # v3.1 embarque un client Docker qui négocie l'API en v1.24, rejetée
+    # (400 Bad Request) par les daemons récents dont l'API minimale est
+    # montée à v1.40+ (ex: Docker Desktop récent) — v3.7 corrige cette
+    # négociation. Voir la discussion dans la PR d'introduction de ce fichier.
+    image: traefik:v3.7
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.traefik.address=:8080"
+      - "--api.dashboard=true"
+      - "--metrics.prometheus=true"
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - enervision-net
+    labels:
+      # Dashboard Traefik exposé sur son propre entrypoint (:8080), protégé
+      # par basic auth : sans ça --api.dashboard=true seul ne sert rien tant
+      # qu'aucun router ne pointe vers le service interne api@internal.
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=traefik"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
+      # admin / admin — à changer en prod (générer avec `openssl passwd -apr1`).
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$SFOMPty7$$gIWm8tIUjfrD71YDXaH.r."
+
+  # Image TimescaleDB (surcouche Postgres) au lieu de postgres:16-alpine, pour
+  # disposer de l'extension timescaledb sur les séries temporelles — le
+  # service reste nommé "postgres" pour ne pas casser les autres services.
+  postgres:
+    image: timescale/timescaledb:2.15.3-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - enervision-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Pas de MINIO_PROMETHEUS_AUTH_TYPE=public ici : /minio/v2/metrics/*
+      # reste protégé par JWT (comportement par défaut de MinIO). Le token
+      # de scrape est généré par le service minio-metrics-token.
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - enervision-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - enervision-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
+  minio-metrics-token:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    entrypoint: /bin/bash
+    command: /init/generate-prometheus-token.sh
+    volumes:
+      - ./minio/init:/init:ro
+      - minio-metrics-token:/secrets
+    networks:
+      - enervision-net
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+      - minio-metrics-token:/etc/prometheus/secrets:ro
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      traefik:
+        condition: service_started
+      postgres-exporter:
+        condition: service_started
+      redis-exporter:
+        condition: service_started
+      minio-metrics-token:
+        condition: service_completed_successfully
+      etl_worker:
+        condition: service_started
+    networks:
+      - enervision-net
+    labels:
+      # Accès via Traefik en plus du bind loopback existant (celui-ci reste
+      # pour l'accès direct par tunnel SSH).
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - enervision-net
+    labels:
+      # Plus de port publié : on passe uniquement par Traefik désormais.
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKETS: ${MINIO_BUCKETS}
+    entrypoint: /bin/sh
+    command: /init/create-buckets.sh
+    volumes:
+      - ./minio/init:/init:ro
+    networks:
+      - enervision-net
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: mlflow/Dockerfile
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      MLFLOW_DB_SCHEMA: ${MLFLOW_DB_SCHEMA:-mlflow}
+      # Réutilise le bucket "models" existant (même convention que
+      # MinioModelStore, voir apps/prediction/infrastructure/model_store) -
+      # pas de nouveau bucket : MLflow préfixe ses clés par experiment_id
+      # (numérique), MinioModelStore par model_name, aucune collision.
+      MINIO_MODELS_BUCKET: ${MINIO_MODELS_BUCKET:-models}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - enervision-net
+
+  # Migration Alembic exécutée une seule fois : core_api ET recommendation
+  # lancent chacun "alembic upgrade head" au démarrage de leur conteneur
+  # (voir apps/core_api/Dockerfile, apps/recommendation/Dockerfile). Sur une
+  # base fraîche, les deux CREATE TABLE alembic_version concurrents entrent
+  # en course et l'un des deux plante avec UniqueViolation sur
+  # pg_type_typname_nsp_index — "service_started" (contrairement à
+  # service_completed_successfully) n'attend que le lancement du process,
+  # pas la fin de sa propre migration. Ce service dédié applique les
+  # migrations avant que core_api/recommendation ne démarrent ; leur propre
+  # "alembic upgrade head" devient alors un no-op sûr (déjà à head).
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/core_api/Dockerfile
+    command: ["alembic", "-c", "/packages/db-schema/alembic.ini", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
+  core_api:
+    build:
+      # Contexte élargi à la racine du repo pour pouvoir copier packages/
+      # (dépendance partagée mockapi-client) dans l'image.
+      context: .
+      dockerfile: apps/core_api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PREDICTION_URL: http://prediction:8000
+      RECOMMENDATION_URL: http://recommendation:8000
+      ENERVISION_API_SCHEME: ${ENERVISION_API_SCHEME:-http}
+      ENERVISION_API_HOST: ${ENERVISION_API_HOST}
+      ENERVISION_API_PORT: ${ENERVISION_API_PORT}
+      ENERVISION_API_USERNAME: ${ENERVISION_API_USERNAME}
+      ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      # Badge de drift (docs/monitoring_model.md, section 6) : core_api lit
+      # ml_feature_drift_score directement depuis l'API HTTP de Prometheus.
+      PROMETHEUS_URL: http://prometheus:9090
+      # Pas de CORS_ORIGINS ici : contrairement à ENERVISION_API_PORT plus
+      # haut, il n'y a pas besoin de le fournir explicitement, et le faire
+      # via ${CORS_ORIGINS} casse tout environnement sans cette variable
+      # (ex. CI) - os.environ.get() ne retombe sur le défaut Python que si
+      # la clé est absente, pas si elle vaut "" (voir infrastructure/config.py).
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      prediction:
+        condition: service_started
+      recommendation:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - enervision-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.core_api.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.core_api.entrypoints=web"
+      - "traefik.http.services.core_api.loadbalancer.server.port=8000"
+
+  prediction:
+    build:
+      context: .
+      dockerfile: apps/prediction/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      TRAINING_DATA_SOURCE: postgres
+      # MinioModelStore reste disponible (MODEL_STORE=minio) mais n'est plus
+      # utilisé par défaut - voir docs/model-registry.md.
+      MODEL_STORE: mlflow
+      MODEL_NAME: energy-consumption
+      STATE_MODEL_NAME: sensor-state-model
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_MODELS_BUCKET: ${MINIO_MODELS_BUCKET:-models}
+      # Le client MLflow parle directement à MinIO (mêmes identifiants que
+      # ci-dessus) pour lire/écrire les artefacts, le tracking server ne les
+      # proxie pas.
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+      # "models" (bucket.minio:9000) ne résout pas en DNS - force l'addressing
+      # style "path" (cf. mlflow/entrypoint.sh, même besoin côté serveur).
+      AWS_CONFIG_FILE: /app/aws_config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    networks:
+      - enervision-net
+    labels:
+      # Exposé directement en plus du chemin interne via core_api, pratique
+      # pour tester le service ML isolément (Swagger sur /prediction/docs).
+      - "traefik.enable=true"
+      - "traefik.http.routers.prediction.rule=PathPrefix(`/prediction`)"
+      - "traefik.http.routers.prediction.entrypoints=web"
+      - "traefik.http.routers.prediction.middlewares=prediction-stripprefix"
+      - "traefik.http.middlewares.prediction-stripprefix.stripprefix.prefixes=/prediction"
+      - "traefik.http.services.prediction.loadbalancer.server.port=8000"
+
+  recommendation:
+    build:
+      # Contexte élargi à la racine du repo pour pouvoir copier packages/
+      # (dépendance partagée db-schema) dans l'image.
+      context: .
+      dockerfile: apps/recommendation/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PREDICTION_URL: http://prediction:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      prediction:
+        condition: service_started
+    networks:
+      - enervision-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.recommendation.rule=PathPrefix(`/recommendation`)"
+      - "traefik.http.routers.recommendation.entrypoints=web"
+      - "traefik.http.routers.recommendation.middlewares=recommendation-stripprefix"
+      - "traefik.http.middlewares.recommendation-stripprefix.stripprefix.prefixes=/recommendation"
+      - "traefik.http.services.recommendation.loadbalancer.server.port=8000"
+
+  etl_worker:
+    build:
+      # Contexte élargi à la racine du repo pour pouvoir copier packages/
+      # (dépendance partagée mockapi-client) dans l'image.
+      context: .
+      dockerfile: apps/etl_worker/Dockerfile
+    environment:
+      # TransformJob (readings_curated) : +psycopg, même driver que db_schema.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      ENERVISION_API_SCHEME: ${ENERVISION_API_SCHEME:-http}
+      ENERVISION_API_HOST: ${ENERVISION_API_HOST}
+      ENERVISION_API_PORT: ${ENERVISION_API_PORT}
+      ENERVISION_API_USERNAME: ${ENERVISION_API_USERNAME}
+      ENERVISION_API_PASSWORD: ${ENERVISION_API_PASSWORD}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET:-raw}
+      ETL_POLL_INTERVAL_SECONDS: ${ETL_POLL_INTERVAL_SECONDS:-60}
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - enervision-net
+
+networks:
+  enervision-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  minio-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+  minio-metrics-token:

@@ -1,0 +1,132 @@
+name: Dashboard E2E
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - "apps/dashboard/**"
+      - "apps/core_api/**"
+      - "apps/prediction/**"
+      - "apps/recommendation/**"
+      - "packages/**"
+      - "docker-compose.yml"
+      - ".github/workflows/dashboard-e2e.yml"
+  pull_request:
+    branches:
+      - main
+      - dev
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "apps/dashboard/**"
+      - "apps/core_api/**"
+      - "apps/prediction/**"
+      - "apps/recommendation/**"
+      - "packages/**"
+      - "docker-compose.yml"
+      - ".github/workflows/dashboard-e2e.yml"
+
+env:
+  # Identifiants locaux, valables uniquement pour la durée du run CI.
+  POSTGRES_USER: enervision_ci
+  POSTGRES_PASSWORD: enervision_ci
+  POSTGRES_DB: enervision
+  MINIO_ROOT_USER: enervision_ci
+  MINIO_ROOT_PASSWORD: enervision_ci
+  MINIO_BUCKETS: raw,processed,models,backups
+  # CORS_ORIGINS a une valeur par défaut côté core_api compatible avec ce
+  # run (cf. apps/core_api/presentation/api.py, port 3000).
+  # ENERVISION_API_HOST/PORT doivent en revanche être fournis explicitement :
+  # docker-compose.yml les injecte tels quels (`${ENERVISION_API_HOST}`)
+  # dans le conteneur, donc sans .env local ni override ici la clé existe
+  # mais vide, ce qui empêche le fallback "localhost" de infrastructure/config.py
+  # de s'appliquer (os.environ.get ne retombe sur le défaut que si la clé
+  # est absente, pas si elle est vide).
+  ENERVISION_API_SCHEME: https
+  ENERVISION_API_HOST: api-mock.charlieandre.fr
+  ENERVISION_API_PORT: ""
+  ENERVISION_API_USERNAME: ${{ secrets.ENERVISION_API_USERNAME }}
+  ENERVISION_API_PASSWORD: ${{ secrets.ENERVISION_API_PASSWORD }}
+  NEXT_PUBLIC_API_BFF_URL: http://localhost
+
+jobs:
+  e2e:
+    name: Playwright
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start backend stack (docker compose)
+        run: docker compose up -d --build core_api traefik
+
+      - name: Wait for core_api to be reachable through Traefik
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost/health -o /dev/null; then
+              echo "core_api is up"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "core_api did not become ready in time"
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Seed sites and default admin (packages/db-schema/alembic/seeds)
+        run: |
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < packages/db-schema/alembic/seeds/seed_sites.sql
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < packages/db-schema/alembic/seeds/seed_admin_user.sql
+
+      - name: Seed extra test users for e2e (apps/dashboard/e2e/*.spec.ts)
+        # /auth/login (voir apps/core_api/presentation/api.py) n'a pas
+        # d'endpoint d'inscription public : ces comptes n'existent que dans
+        # cette base jetable, recréée à chaque run. Identifiants fixes en
+        # dur ici (pas des secrets réels) car les specs les référencent
+        # tels quels. Hash bcrypt de "testpass123" et "bobpass456".
+        run: |
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+            "INSERT INTO enervision.users (id, email, password_hash, role) VALUES (gen_random_uuid(), 'alice@example.com', '\$2b\$12\$5cz3fy9ebsUuCvt5gBja.OLPDWGqSjjlDPlE46BrL2aNWvmR8WHc2', 'admin');"
+          docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+            "INSERT INTO enervision.users (id, email, password_hash, role) VALUES (gen_random_uuid(), 'bob@example.com', '\$2b\$12\$r/FMLj3ByQQMc2LqiqMavuB1zw9AB5wkpnvJAJu5A9xP7ObjY7UKC', 'viewer');"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: apps/dashboard
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: apps/dashboard
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        working-directory: apps/dashboard
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/dashboard/playwright-report/
+          retention-days: 7
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop backend stack
+        if: always()
+        run: docker compose down -v

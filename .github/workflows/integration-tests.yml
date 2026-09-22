@@ -1,0 +1,105 @@
+name: Backend Integration Tests
+
+# Tests marqués @pytest.mark.integration (apps/<service>/tests/integration/) :
+# contrairement aux suites pytest habituelles (mocks/fakes, voir README
+# "Tests & CI"), ceux-ci tapent de vrais Postgres/Redis/MinIO. Mêmes
+# services infra que dashboard-e2e.yml, mais sans construire ni démarrer les
+# conteneurs applicatifs : les tests importent le code Python de chaque
+# service directement et s'y connectent en localhost - plus rapide, et ne
+# nécessite aucun secret (pas d'appel à l'API mock EnerVision ici).
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - "apps/core_api/**"
+      - "apps/etl_worker/**"
+      - "apps/prediction/**"
+      - "apps/recommendation/**"
+      - "packages/**"
+      - "docker-compose.yml"
+      - ".github/workflows/integration-tests.yml"
+  pull_request:
+    branches:
+      - main
+      - dev
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - "apps/core_api/**"
+      - "apps/etl_worker/**"
+      - "apps/prediction/**"
+      - "apps/recommendation/**"
+      - "packages/**"
+      - "docker-compose.yml"
+      - ".github/workflows/integration-tests.yml"
+
+env:
+  # Identifiants locaux, valables uniquement pour la durée du run CI (même
+  # convention que dashboard-e2e.yml et load-test.yml).
+  POSTGRES_USER: enervision_ci
+  POSTGRES_PASSWORD: enervision_ci
+  POSTGRES_DB: enervision
+  MINIO_ROOT_USER: enervision_ci
+  MINIO_ROOT_PASSWORD: enervision_ci
+  MINIO_BUCKETS: raw,processed,models,backups
+  # Vus par les tests (pas par les conteneurs) : correspondent aux ports
+  # publiés par défaut dans docker-compose.yml (POSTGRES_PORT, REDIS_PORT,
+  # MINIO_PORT), les tests tournant sur le runner, pas dans le réseau Docker.
+  DATABASE_URL: postgresql+psycopg://enervision_ci:enervision_ci@localhost:5432/enervision
+  REDIS_HOST: localhost
+  REDIS_PORT: "6379"
+  MINIO_ENDPOINT: localhost:9000
+
+jobs:
+  integration:
+    name: pytest -m integration - ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - core_api
+          - etl_worker
+          - prediction
+          - recommendation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start infra (Postgres, Redis, MinIO)
+        run: docker compose up -d --wait postgres redis minio
+
+      - name: Create MinIO buckets
+        run: docker compose run --rm minio-init
+
+      - name: Run database migrations
+        run: docker compose run --rm migrate
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/${{ matrix.app }}/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: apps/${{ matrix.app }}
+        run: pip install -r requirements-dev.txt
+
+      - name: Run integration tests
+        working-directory: apps/${{ matrix.app }}
+        run: python -m pytest -m integration -v
+
+      - name: Dump infra logs on failure
+        if: failure()
+        run: docker compose logs postgres redis minio migrate minio-init
+
+      - name: Stop infra
+        if: always()
+        run: docker compose down -v
