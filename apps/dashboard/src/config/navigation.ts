@@ -1,4 +1,4 @@
-export type NavIcon = "dashboard" | "prediction" | "admin";
+export type NavIcon = "dashboard" | "sites" | "prediction" | "admin";
 
 export type NavItem = {
   label: string;
@@ -12,6 +12,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Dashboard",
     href: "/",
     icon: "dashboard",
+  },
+  {
+    label: "Sites",
+    href: "/sites",
+    icon: "sites",
   },
   {
     label: "Prédictions & Recommandations",

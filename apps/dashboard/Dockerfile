@@ -22,13 +22,19 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-COPY apps/dashboard/package.json apps/dashboard/package-lock.json ./
-RUN npm ci --omit=dev
+# node:22-alpine embarque npm/npx/corepack, inutiles à l'exécution (CMD ne
+# lance que server.js) et responsables des CVE HIGH/CRITICAL remontées par
+# Trivy sur l'image (dépendances internes du CLI npm, sans rapport avec le
+# code de l'app).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 
-COPY --from=builder /app/.next ./.next
+# output: "standalone" (next.config.ts) fournit un server.js autonome avec le
+# strict minimum de node_modules requis.
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.ts ./next.config.ts
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

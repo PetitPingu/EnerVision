@@ -16,3 +16,5 @@ export const ADMIN_USERS_ENDPOINT = "/admin/users";
 export const ALERTS_STREAM_ENDPOINT = "/api/v1/alerts/stream";
 
 export const ALERTS_ACTIVE_ENDPOINT = "/api/v1/alerts/active";
+
+export const SENSORS_STATUS_ENDPOINT = "/api/v1/sensors/status";

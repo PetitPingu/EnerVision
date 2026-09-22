@@ -94,7 +94,7 @@ export function TopHeader() {
       <div className="flex items-center gap-4">
         <EnerVisionLogo size="sm" />
         <h1 className="text-lg font-semibold text-zinc-900">{pageTitle}</h1>
-        <SiteSelect />
+        {pathname !== "/sites" && <SiteSelect />}
       </div>
 
       <div className="flex items-center gap-3">
