@@ -11,13 +11,17 @@ from domain.model_health import (
 
 
 def _reconciled(**overrides) -> ReconciledPrediction:
+    # Horodatages relatifs à l'instant du test, pas figés : compute_mae_24h
+    # (voir application/model_health_job.py) filtre sur datetime.now(timezone.utc),
+    # une date en dur finit hors fenêtre dès que le temps réel avance.
+    now = datetime.now(timezone.utc)
     data = {
         "site_id": "SITE001",
-        "target_timestamp": datetime(2026, 9, 21, 11, 0, tzinfo=timezone.utc),
+        "target_timestamp": now - timedelta(minutes=30),
         "predicted_consumption_kwh": 100.0,
         "actual_consumption_kwh": 90.0,
         "model_version": "2026-09-16T14-30-00Z",
-        "generated_at": datetime(2026, 9, 21, 10, 30, tzinfo=timezone.utc),
+        "generated_at": now - timedelta(hours=1),
         **overrides,
     }
     return ReconciledPrediction(**data)
@@ -84,7 +88,7 @@ def test_run_skips_drift_when_model_version_is_unparseable(monkeypatch):
 
 
 def test_run_publishes_mae_by_horizon_when_enough_samples_exist(monkeypatch):
-    now = datetime(2026, 9, 21, 11, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     reader = Mock()
     reader.fetch_reconciled_predictions.return_value = [
         _reconciled(

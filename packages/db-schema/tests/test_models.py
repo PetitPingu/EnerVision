@@ -10,6 +10,7 @@ def test_registers_one_table_per_entity_in_the_enervision_schema():
         "enervision.alerts",
         "enervision.readings_curated",
         "enervision.recommendations",
+        "enervision.predictions_log",
         "enervision.users",
         "enervision.user_sites",
     }
