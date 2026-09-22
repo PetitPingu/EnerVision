@@ -1,8 +1,11 @@
 """Client HTTP pour le service prediction (voir apps/prediction).
 
 Relaie les prévisions de consommation vers le service interne `prediction`
-(adressé via PREDICTION_URL). Ne lève jamais d'exception : les erreurs sont
-loggées et `None` est retourné à l'appelant, qui traduit ça en 502.
+(adressé via PREDICTION_URL). Ne lève jamais d'exception pour une panne
+générique : les erreurs sont loggées et `None` est retourné à l'appelant,
+qui traduit ça en 502. Exception : get_sensor_state() lève
+PredictionModelNotLoadedError sur un 503 du service prediction ("aucun
+modèle d'état promu"), à distinguer d'un service injoignable.
 """
 
 import logging
@@ -12,6 +15,11 @@ import requests
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+
+class PredictionModelNotLoadedError(Exception):
+    """Le service prediction répond, mais aucun modèle d'état n'a encore
+    été promu (503 sur /predict/state)."""
 
 
 class PredictionApiClient:
@@ -44,6 +52,40 @@ class PredictionApiClient:
         except requests.RequestException as exc:
             logger.error(
                 "Échec de l'appel au service prediction (predict/range, %s) : %s",
+                site_id,
+                exc,
+            )
+            return None
+
+        return response.json()
+
+    def get_sensor_state(self, site_id: str, timestamp: str) -> dict | None:
+        """Relaie GET /predict/state du service prediction : état on/off
+        prédit pour chacun des capteurs d'un site à un instant donné.
+
+        Lève PredictionModelNotLoadedError sur un 503 (aucun modèle d'état
+        promu) plutôt que de retourner None, pour que l'appelant distingue
+        "pas encore de modèle" d'un service prediction injoignable.
+        """
+        try:
+            response = requests.get(
+                f"{self._base_url}/predict/state",
+                params={"site_id": site_id, "timestamp": timestamp},
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 503:
+                raise PredictionModelNotLoadedError from exc
+            logger.error(
+                "Échec de l'appel au service prediction (predict/state, %s) : %s",
+                site_id,
+                exc,
+            )
+            return None
+        except requests.RequestException as exc:
+            logger.error(
+                "Échec de l'appel au service prediction (predict/state, %s) : %s",
                 site_id,
                 exc,
             )

@@ -153,8 +153,8 @@ sequenceDiagram
     participant Pred as Service Prediction (FastAPI)
     participant MLflow as MLflow (alias "current")
 
-    Client->>Core: GET /sites/{id}/state (Bearer JWT)
-    Core->>Core: Vérifie le JWT
+    Client->>Core: GET /api/v1/predictions/sensors?site_id=...&timestamp=... (Bearer JWT)
+    Core->>Core: Vérifie le JWT + l'accès au site
     Core->>Pred: GET /predict/state?site_id=...&timestamp=...
     Pred->>MLflow: load_latest("sensor-state-model")
     alt Modèle disponible
@@ -164,7 +164,7 @@ sequenceDiagram
         Core-->>Client: 200 OK
     else Aucun modèle promu
         Pred-->>Core: 503 state model not loaded
-        Core-->>Client: 503
+        Core-->>Client: 503 (PredictionModelNotLoadedError)
     end
 ```
 

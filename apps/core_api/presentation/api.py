@@ -33,7 +33,7 @@ from infrastructure.auth import (
 from infrastructure.config import Config
 from infrastructure.login_throttle import is_locked_out, record_failed_attempt, reset_attempts
 from infrastructure.password_policy import WeakPasswordError, validate_password_strength
-from infrastructure.prediction_client import PredictionApiClient
+from infrastructure.prediction_client import PredictionApiClient, PredictionModelNotLoadedError
 from infrastructure.recommendation_client import RecommendationApiClient
 from infrastructure.redis_alert_stream import RedisAlertStreamReader
 from infrastructure.site_access_repository import SqlSiteAccessRepository
@@ -177,6 +177,7 @@ def root() -> dict:
             "/api/v1/alerts/active",
             "/api/v1/sensors/status",
             "/api/v1/predictions/range",
+            "/api/v1/predictions/sensors",
             "/api/v1/recommendations",
         ]
     }
@@ -400,6 +401,35 @@ def list_predictions_range(
     result = prediction_api.get_prediction_range(
         site_id=site_id, start_time=start_time, end_time=end_time, interval=interval
     )
+    if result is None:
+        raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
+    return result
+
+
+@app.get(
+    "/api/v1/predictions/sensors",
+    tags=["Predictions"],
+    summary="État on/off prédit des capteurs d'un site",
+)
+def predict_sensors_state(
+    site_id: str = Query(..., min_length=1, description="Site à prédire, ex: SITE001"),
+    timestamp: str = Query(
+        ...,
+        description="Horodatage cible au format ISO 8601, ex: 2026-09-17T14:30:00Z",
+    ),
+    current_user: CurrentUser = Depends(require_auth),
+) -> dict:
+    """Relaie GET /predict/state du service prediction : état on/off prédit
+    pour chacun des 6 capteurs du site à l'instant demandé (pas d'état
+    global déduit, voir apps/prediction/docs/state-model.md)."""
+    _assert_site_access(current_user, site_id)
+    try:
+        result = prediction_api.get_sensor_state(site_id=site_id, timestamp=timestamp)
+    except PredictionModelNotLoadedError:
+        raise HTTPException(
+            status_code=503,
+            detail="Aucun modèle d'état des capteurs n'a encore été entraîné",
+        )
     if result is None:
         raise HTTPException(status_code=502, detail="Service de prédiction indisponible")
     return result
