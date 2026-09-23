@@ -133,6 +133,7 @@ resource "docker_container" "recommendation" {
   depends_on = [
     docker_container.database,
     docker_container.prediction,
+    terraform_data.db_migrate,
   ]
 }
 
@@ -185,6 +186,7 @@ resource "docker_container" "core_api" {
     docker_container.prediction,
     docker_container.recommendation,
     docker_container.redis,
+    terraform_data.db_migrate,
   ]
 }
 
