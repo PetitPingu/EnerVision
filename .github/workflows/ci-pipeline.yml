@@ -15,6 +15,9 @@ on:
     branches:
       - main
       - dev
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
     branches:
       - main
@@ -23,6 +26,9 @@ on:
       - opened
       - synchronize
       - reopened
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
 
 permissions:
   contents: read
@@ -274,9 +280,12 @@ jobs:
   # Étape 3 : scan (uniquement si toute l'étape test a réussi).
   # scan-image est enchaîné après scan-fs (pas de parallélisation entre les
   # deux) : leurs conditions de branche (dev / main) sont mutuellement
-  # exclusives, donc scan-fs est "skipped" sur main — scan-image doit donc
-  # tester needs.scan-fs.result explicitement (success OU skipped) plutôt
-  # que de dépendre du success() implicite, sinon il serait lui aussi skippé.
+  # exclusives, donc scan-fs est "skipped" sur main — mais ce skip est
+  # indiscernable (needs.scan-fs.result == 'skipped') d'un skip causé par un
+  # échec des jobs de test en amont (scan-fs serait alors aussi "skipped").
+  # scan-image reprend donc explicitement les 4 jobs de test dans `needs` et
+  # vérifie leur success() un par un, en plus de scan-fs (success OU
+  # skipped) — sinon un échec de test n'empêcherait pas le build d'image.
   # ---------------------------------------------------------------------
   scan-fs:
     name: "Scan: deps (fs) - ${{ matrix.app }}"
@@ -332,9 +341,18 @@ jobs:
 
   scan-image:
     name: "Scan: image - ${{ matrix.app }}"
-    needs: scan-fs
+    needs:
+      - lint
+      - unit-prediction
+      - integration
+      - e2e
+      - scan-fs
     if: |
       always() &&
+      needs.lint.result == 'success' &&
+      needs.unit-prediction.result == 'success' &&
+      needs.integration.result == 'success' &&
+      needs.e2e.result == 'success' &&
       (needs.scan-fs.result == 'success' || needs.scan-fs.result == 'skipped') &&
       ((github.event_name == 'push' && github.ref_name == 'main') ||
        (github.event_name == 'pull_request' && github.base_ref == 'main'))
@@ -346,6 +364,8 @@ jobs:
           - core_api
           - dashboard
           - etl_worker
+          - prediction
+          - recommendation
 
     steps:
       - name: Checkout
