@@ -82,9 +82,11 @@ jobs:
 
       - name: Backup Docker volumes before deploy
         run: |
-          if [ -n "${{ vars.DOCKER_BACKUP_ROOT }}" ]; then
-            export BACKUP_ROOT="${{ vars.DOCKER_BACKUP_ROOT }}"
+          export BACKUP_ROOT="${{ vars.DOCKER_BACKUP_ROOT }}"
+          if [ -z "$BACKUP_ROOT" ]; then
+            export BACKUP_ROOT="/var/backups/enervision"
           fi
+          mkdir -p "$BACKUP_ROOT"
           bash scripts/backup-docker.sh
 
       - name: Terraform apply
