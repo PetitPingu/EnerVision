@@ -26,6 +26,10 @@ on:
 
 permissions:
   contents: read
+  # Nécessaire pour publier les résultats Trivy (SARIF) sur l'onglet
+  # Security et faire apparaître les vulnérabilités en annotations sur la
+  # page du run / les fichiers changés d'une PR.
+  security-events: write
 
 env:
   # Valeur factice pour la compilation CI (cf. apps/dashboard/.env.example)
@@ -299,7 +303,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy vulnerability scanner (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: apps/${{ matrix.app }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-fs-${{ matrix.app }}"
+
+      - name: Run Trivy vulnerability scanner (table)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -344,7 +365,24 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy vulnerability scanner (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: enervision/${{ matrix.app }}:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-image-${{ matrix.app }}"
+
+      - name: Run Trivy vulnerability scanner (table)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
