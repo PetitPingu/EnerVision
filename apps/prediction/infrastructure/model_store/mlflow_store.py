@@ -13,6 +13,9 @@ manuellement. Pas "latest" : ce nom est réservé par MLflow (conflit avec la
 notion historique de "dernière version"), il lève une erreur à la création.
 """
 
+import tempfile
+import threading
+
 import mlflow
 import mlflow.sklearn
 from mlflow.entities import Run
@@ -24,12 +27,21 @@ from application.ports import ModelStorePort, SavedModelMetadata
 
 _ALIAS = "current"
 
+# Au niveau du module et pas de l'instance : l'API crée un nouveau store à
+# chaque requête (create_model_store()). Une entrée par (tracking_uri,
+# model_name) : (run_id, pipeline, metadata) de la dernière version chargée.
+# run_id plutôt que le numéro de version, unique même entre deux backends
+# MLflow (tests : une base sqlite jetable par test, versions toutes à "1").
+_LOADED_MODELS: dict[tuple[str, str], tuple[str, Pipeline, SavedModelMetadata]] = {}
+_LOAD_LOCK = threading.Lock()
+
 
 class MlflowModelStore(ModelStorePort):
     """Enregistre les modèles dans MLflow (Tracking + Model Registry)."""
 
     def __init__(self, tracking_uri: str, client: MlflowClient | None = None):
         mlflow.set_tracking_uri(tracking_uri)
+        self._tracking_uri = tracking_uri
         self._client = client or MlflowClient(tracking_uri=tracking_uri)
 
     def save(self, pipeline: Pipeline, metadata: SavedModelMetadata) -> str:
@@ -65,11 +77,43 @@ class MlflowModelStore(ModelStorePort):
         self._client.set_registered_model_alias(model_name, _ALIAS, version)
 
     def load_latest(self, model_name: str) -> tuple[Pipeline, SavedModelMetadata]:
-        model_version = self._client.get_model_version_by_alias(model_name, _ALIAS)
-        run = self._client.get_run(model_version.run_id)
+        """Modèle pointé par l'alias `current`, gardé en mémoire tant que
+        l'alias ne change pas.
 
-        pipeline = mlflow.sklearn.load_model(f"models:/{model_name}@{_ALIAS}")
-        metadata = _metadata_from_run(model_name, run)
+        Seule la résolution de l'alias (appel léger au Registry) est faite à
+        chaque requête : une promotion reste visible immédiatement, sans
+        redémarrage. Le téléchargement des artefacts n'a lieu qu'au premier
+        appel ou après une promotion, dans un dossier temporaire supprimé
+        aussitôt - sans dst_path, MLflow crée un nouveau dossier temporaire
+        à chaque load_model() et ne le nettoie jamais (35 Go accumulés dans
+        le conteneur prediction, disque du serveur saturé le 23/09/2026).
+        """
+        model_version = self._client.get_model_version_by_alias(model_name, _ALIAS)
+        cache_key = (self._tracking_uri, model_name)
+
+        cached = _LOADED_MODELS.get(cache_key)
+        if cached is not None and cached[0] == model_version.run_id:
+            return cached[1], cached[2]
+
+        with _LOAD_LOCK:
+            # Un autre thread a pu charger cette même version pendant
+            # l'attente du verrou (requêtes concurrentes juste après une
+            # promotion) : ne pas la re-télécharger.
+            cached = _LOADED_MODELS.get(cache_key)
+            if cached is not None and cached[0] == model_version.run_id:
+                return cached[1], cached[2]
+
+            run = self._client.get_run(model_version.run_id)
+            with tempfile.TemporaryDirectory() as dst_path:
+                # Version explicite plutôt que l'alias : si l'alias bouge
+                # entre les deux appels, pipeline et métadonnées restent
+                # ceux de la même version.
+                pipeline = mlflow.sklearn.load_model(
+                    f"models:/{model_name}/{model_version.version}", dst_path=dst_path
+                )
+            metadata = _metadata_from_run(model_name, run)
+
+            _LOADED_MODELS[cache_key] = (model_version.run_id, pipeline, metadata)
 
         return pipeline, metadata
 

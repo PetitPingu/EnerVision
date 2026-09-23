@@ -6,6 +6,8 @@ store fichier ("file:") ne supporte pas le Registry, d'où sqlite plutôt
 qu'un simple dossier local (voir docs/configuration.md).
 """
 
+import os
+
 import mlflow
 import pytest
 from sklearn.pipeline import Pipeline
@@ -114,3 +116,51 @@ def test_models_are_versioned_independently_by_name(store):
     assert metadata_a.model_name == "site-a-model"
     assert metadata_b.model_name == "site-b-model"
     assert metadata_b.mae == 5.0
+
+
+def _spy_load_model(monkeypatch):
+    """Compte les téléchargements d'artefacts et note les dossiers utilisés."""
+    calls = []
+    real_load_model = mlflow.sklearn.load_model
+
+    def spy(model_uri, dst_path=None, **kwargs):
+        calls.append(dst_path)
+        return real_load_model(model_uri, dst_path=dst_path, **kwargs)
+
+    monkeypatch.setattr(mlflow.sklearn, "load_model", spy)
+    return calls
+
+
+def test_load_latest_downloads_the_model_only_once_while_the_alias_is_unchanged(store, monkeypatch):
+    store.save(_pipeline(), _sample_metadata())
+    calls = _spy_load_model(monkeypatch)
+
+    first_pipeline, _ = store.load_latest("energy-consumption")
+    second_pipeline, _ = store.load_latest("energy-consumption")
+
+    assert len(calls) == 1
+    assert second_pipeline is first_pipeline
+
+
+def test_load_latest_reloads_after_a_promotion(store, monkeypatch):
+    store.save(_pipeline(), _sample_metadata(mae=20.0, trained_at="2026-09-15T10-00-00Z"))
+    calls = _spy_load_model(monkeypatch)
+    store.load_latest("energy-consumption")
+
+    store.save(_pipeline(), _sample_metadata(mae=18.2, trained_at="2026-09-16T14-30-00Z"))
+    _, current = store.load_latest("energy-consumption")
+
+    assert len(calls) == 2
+    assert current.mae == 18.2
+
+
+def test_load_latest_does_not_leave_downloaded_artifacts_on_disk(store, monkeypatch):
+    store.save(_pipeline(), _sample_metadata())
+    calls = _spy_load_model(monkeypatch)
+
+    store.load_latest("energy-consumption")
+
+    # Régression : sans dst_path, MLflow laissait une copie complète du
+    # modèle dans un nouveau dossier temporaire à chaque appel.
+    assert calls[0] is not None
+    assert not os.path.exists(calls[0])
