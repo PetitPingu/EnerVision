@@ -5,8 +5,9 @@ d'entraînement :
   - X : site_id + heure/minute
   - y : consumption_kwh (variable à prédire)
 
-Historique court (~10 jours) : seules l'heure et les minutes sont extraites
-du timestamp (pas de jour/mois/année).
+Historique court (~10 jours) : heure, minute et jour de la semaine sont
+extraits du timestamp (pas de mois/année, non significatif sur un
+historique aussi court).
 
 NOTE (test A/B) : temperature_celsius temporairement retirée des features.
 """
@@ -21,7 +22,9 @@ RAW_COLUMNS = [
 ]
 
 # Composantes temporelles extraites du timestamp.
-TEMPORAL_FEATURES = ["hour", "minute"]
+# day_of_week : 0=lundi .. 6=dimanche (pandas .dt.dayofweek) — non ordinal,
+# traité en catégoriel dans le pipeline (voir infrastructure/ml/consumption/pipeline.py).
+TEMPORAL_FEATURES = ["hour", "minute", "day_of_week"]
 
 # Colonnes utilisées comme features par le modèle.
 FEATURE_COLUMNS = ["site_id", *TEMPORAL_FEATURES]
@@ -34,13 +37,14 @@ def extract_temporal_features(
     df: pd.DataFrame,
     timestamp_col: str = "timestamp",
 ) -> pd.DataFrame:
-    """Décompose le timestamp en heure et minutes."""
+    """Décompose le timestamp en heure, minutes et jour de la semaine."""
     # ISO8601 : gère les formats mixtes (avec ou sans microsecondes).
     ts = pd.to_datetime(df[timestamp_col], format="ISO8601")
     return pd.DataFrame(
         {
             "hour": ts.dt.hour,
             "minute": ts.dt.minute,
+            "day_of_week": ts.dt.dayofweek,
         },
         index=df.index,
     )
