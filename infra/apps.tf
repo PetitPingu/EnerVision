@@ -1,23 +1,23 @@
 resource "docker_image" "core_api" {
-  name         = "enervision/core_api:latest"
+  name         = local.app_images.core_api
   keep_locally = true
   depends_on   = [terraform_data.build_core_api]
 }
 
 resource "docker_image" "prediction" {
-  name         = "enervision/prediction:latest"
+  name         = local.app_images.prediction
   keep_locally = true
   depends_on   = [terraform_data.build_prediction]
 }
 
 resource "docker_image" "recommendation" {
-  name         = "enervision/recommendation:latest"
+  name         = local.app_images.recommendation
   keep_locally = true
   depends_on   = [terraform_data.build_recommendation]
 }
 
 resource "docker_image" "etl_worker" {
-  name         = "enervision/etl_worker:latest"
+  name         = local.app_images.etl_worker
   keep_locally = true
   depends_on   = [terraform_data.build_etl_worker]
 }

@@ -35,6 +35,8 @@ locals {
 }
 
 resource "terraform_data" "build_mlflow" {
+  count = var.build_images_locally ? 1 : 0
+
   input = join(",", [
     filemd5("${path.module}/../mlflow/Dockerfile"),
     filemd5("${path.module}/../mlflow/entrypoint.sh"),
@@ -48,6 +50,8 @@ resource "terraform_data" "build_mlflow" {
 }
 
 resource "terraform_data" "build_core_api" {
+  count = var.build_images_locally ? 1 : 0
+
   input = join(",", [
     filemd5("${path.module}/../apps/core_api/Dockerfile"),
     local.core_api_source_hash,
@@ -61,6 +65,8 @@ resource "terraform_data" "build_core_api" {
 }
 
 resource "terraform_data" "build_prediction" {
+  count = var.build_images_locally ? 1 : 0
+
   input = join(",", [
     filemd5("${path.module}/../apps/prediction/Dockerfile"),
     local.prediction_source_hash,
@@ -74,6 +80,8 @@ resource "terraform_data" "build_prediction" {
 }
 
 resource "terraform_data" "build_recommendation" {
+  count = var.build_images_locally ? 1 : 0
+
   input = join(",", [
     filemd5("${path.module}/../apps/recommendation/Dockerfile"),
     local.recommendation_source_hash,
@@ -87,6 +95,8 @@ resource "terraform_data" "build_recommendation" {
 }
 
 resource "terraform_data" "build_etl_worker" {
+  count = var.build_images_locally ? 1 : 0
+
   input = join(",", [
     filemd5("${path.module}/../apps/etl_worker/Dockerfile"),
     local.etl_worker_source_hash,
@@ -100,6 +110,8 @@ resource "terraform_data" "build_etl_worker" {
 }
 
 resource "terraform_data" "build_dashboard" {
+  count = var.build_images_locally ? 1 : 0
+
   input = join(",", [
     filemd5("${path.module}/../apps/dashboard/Dockerfile"),
     filemd5("${path.module}/../apps/dashboard/package-lock.json"),

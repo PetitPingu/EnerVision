@@ -69,3 +69,18 @@ dashboard_api_bff_url = "http://localhost:8000"
 # docker_host = "unix:///var/run/docker.sock"
 #
 # Docker Engine 29+ exige le provider kreuzwerker/docker >= 3.6.2 (voir main.tf).
+
+# --- Images applicatives (GHCR) ---
+# Dev local (terraform apply build les images) :
+# build_images_locally = true
+#
+# CI / VM (pull depuis GHCR, voir docs/registry-ghcr.md) :
+# build_images_locally  = false
+# image_registry_prefix = "ghcr.io/petitpingu/enervision"
+# image_tag             = "dev"          # ou sha-<commit>, pr-<numéro> pour tests
+#
+# Pull GHCR à distance (terraform apply depuis le poste, Docker sur la VM via SSH) :
+# vm_host         = "adresse.vm.ecole"
+# ssh_user        = "deploy"
+# ghcr_username   = "votre_compte_github"
+# ghcr_read_token = "ghp_..."            # read:packages — ne pas committer
