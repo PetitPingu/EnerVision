@@ -6,7 +6,7 @@ fi
 
 set -euo pipefail
 
-BACKUP_ROOT="${BACKUP_ROOT:-$HOME/docker-backups}"
+BACKUP_ROOT="${BACKUP_ROOT:-${HOME:-/var/backups/enervision}/docker-backups}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 

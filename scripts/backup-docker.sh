@@ -6,7 +6,7 @@ fi
 
 set -euo pipefail
 
-BACKUP_ROOT="${BACKUP_ROOT:-$HOME/docker-backups}"
+BACKUP_ROOT="${BACKUP_ROOT:-${HOME:-/var/backups/enervision}/docker-backups}"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_DIR="$BACKUP_ROOT/$STAMP"
 mkdir -p "$BACKUP_DIR"
