@@ -5,17 +5,16 @@ on:
     workflows: ["Build and push images (GHCR)"]
     types: [completed]
     branches:
-      - dev
       - main
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Tag GHCR à déployer (ex. pr-168, dev, sha-<commit>)"
+        description: "Tag GHCR à déployer (ex. main, sha-<commit>)"
         required: true
-        default: "dev"
+        default: "main"
 
 concurrency:
-  group: deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  group: deploy-production
   cancel-in-progress: false
 
 env:
@@ -26,14 +25,17 @@ jobs:
     name: Terraform apply (self-hosted)
     runs-on: [self-hosted, enervision-vm]
     if: >
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Resolve image tag
         id: image
