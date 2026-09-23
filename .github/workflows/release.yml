@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["Deploy (Terraform + GHCR)"]
-    types: [completed]
+  pull_request:
+    types: [closed]
     branches:
       - main
 
@@ -11,75 +10,43 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.workflow_run.head_sha }}
+  group: release-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   release:
     name: Create GitHub release
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.ref == 'dev' &&
+      startsWith(github.event.pull_request.title, 'chore(release): v')
 
     steps:
-      - name: Resolve merged PR and version
+      - name: Extract version
         id: meta
         env:
-          GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
 
-          PR_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" --jq '.[0]' 2>/dev/null || echo "null")
-          if [ "$PR_JSON" = "null" ] || [ -z "$PR_JSON" ]; then
-            echo "Aucune PR associée au commit ${HEAD_SHA} — pas de release."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          if ! echo "$PR_TITLE" | grep -qE '^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::Titre de PR release invalide : $PR_TITLE"
+            exit 1
           fi
 
-          TITLE=$(echo "$PR_JSON" | jq -r '.title')
-          PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
-          MERGED=$(echo "$PR_JSON" | jq -r '.merged_at')
-
-          if [ "$MERGED" = "null" ] || [ -z "$MERGED" ]; then
-            echo "PR #${PR_NUMBER} non mergée — pas de release."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! echo "$TITLE" | grep -qE '^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+'; then
-            echo "Pas une PR release (${TITLE}) — pas de release."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          VERSION=$(echo "$TITLE" | sed -E 's/^chore\(release\): (v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-          RELEASE_NAME=$(echo "$TITLE" | sed -E 's/^chore\(release\): //')
+          VERSION=$(echo "$PR_TITLE" | sed -E 's/^chore\(release\): (v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          RELEASE_NAME=$(echo "$PR_TITLE" | sed -E 's/^chore\(release\): //')
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-          echo "Release ${VERSION} pour PR #${PR_NUMBER} (${TITLE})"
-
-      - name: Fetch PR body for release notes
-        if: steps.meta.outputs.skip != 'true'
-        id: notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          BODY=$(gh pr view "${{ steps.meta.outputs.pr_number }}" --json body --jq '.body')
-          {
-            echo "body<<EOF"
-            echo "$BODY"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          echo "Release ${VERSION} (${RELEASE_NAME})"
 
       - name: Create GitHub release
-        if: steps.meta.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.version }}
           name: ${{ steps.meta.outputs.release_name }}
-          body: ${{ steps.notes.outputs.body }}
-          target_commitish: ${{ github.event.workflow_run.head_sha }}
+          body: ${{ github.event.pull_request.body }}
+          target_commitish: ${{ github.event.pull_request.merge_commit_sha }}
           make_latest: true
