@@ -1,0 +1,90 @@
+name: Deploy (Terraform + GHCR)
+
+on:
+  workflow_run:
+    workflows: ["Build and push images (GHCR)"]
+    types: [completed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag GHCR à déployer (ex. main, sha-<commit>)"
+        required: true
+        default: "main"
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  RUNNER_LABEL: enervision-vm
+
+jobs:
+  deploy:
+    name: Terraform apply (self-hosted)
+    runs-on: [self-hosted, enervision-vm]
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Resolve image tag
+        id: image
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore Terraform state
+        env:
+          TF_STATE_DIR: ${{ vars.TF_STATE_DIR }}
+        run: |
+          STATE_DIR="${TF_STATE_DIR:-$HOME/enervision-deploy/state}"
+          mkdir -p "$STATE_DIR"
+          if [ -f "$STATE_DIR/terraform.tfstate" ]; then
+            cp "$STATE_DIR/terraform.tfstate" infra/terraform.tfstate
+          fi
+          echo "STATE_DIR=$STATE_DIR" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+      - name: Terraform apply
+        working-directory: infra
+        env:
+          TF_VAR_build_images_locally: false
+          TF_VAR_image_tag: ${{ steps.image.outputs.tag }}
+          TF_VAR_docker_host: unix:///var/run/docker.sock
+          TF_VAR_docker_socket_path: /var/run/docker.sock
+          TF_VAR_ghcr_username: ${{ secrets.GHCR_USERNAME }}
+          TF_VAR_ghcr_read_token: ${{ secrets.GHCR_READ_TOKEN }}
+          TF_VAR_host: ${{ secrets.DEPLOY_HOST }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_minio_root_password: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          TF_VAR_enervision_api_username: ${{ secrets.ENERVISION_API_USERNAME }}
+          TF_VAR_enervision_api_password: ${{ secrets.ENERVISION_API_PASSWORD }}
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_dashboard_api_bff_url: ${{ vars.DASHBOARD_API_BFF_URL }}
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+
+      - name: Persist Terraform state
+        if: always()
+        run: |
+          STATE_DIR="${STATE_DIR:-$HOME/enervision-deploy/state}"
+          mkdir -p "$STATE_DIR"
+          if [ -f infra/terraform.tfstate ]; then
+            cp infra/terraform.tfstate "$STATE_DIR/terraform.tfstate"
+          fi

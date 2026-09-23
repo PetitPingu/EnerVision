@@ -10,6 +10,14 @@ terraform {
 }
 
 provider "docker" {
-  # host = "ssh://${var.ssh_user}@${var.vm_host}:${var.ssh_port}"
-  host = var.docker_host
+  host = local.docker_host_effective
+
+  dynamic "registry_auth" {
+    for_each = var.ghcr_read_token != "" ? [1] : []
+    content {
+      address  = "ghcr.io"
+      username = var.ghcr_username
+      password = var.ghcr_read_token
+    }
+  }
 }
