@@ -267,7 +267,12 @@ jobs:
         run: docker compose down -v
 
   # ---------------------------------------------------------------------
-  # Étape 3 : scan (uniquement si toute l'étape test a réussi)
+  # Étape 3 : scan (uniquement si toute l'étape test a réussi).
+  # scan-image est enchaîné après scan-fs (pas de parallélisation entre les
+  # deux) : leurs conditions de branche (dev / main) sont mutuellement
+  # exclusives, donc scan-fs est "skipped" sur main — scan-image doit donc
+  # tester needs.scan-fs.result explicitement (success OU skipped) plutôt
+  # que de dépendre du success() implicite, sinon il serait lui aussi skippé.
   # ---------------------------------------------------------------------
   scan-fs:
     name: "Scan: deps (fs) - ${{ matrix.app }}"
@@ -306,14 +311,12 @@ jobs:
 
   scan-image:
     name: "Scan: image - ${{ matrix.app }}"
-    needs:
-      - lint
-      - unit-prediction
-      - integration
-      - e2e
+    needs: scan-fs
     if: |
-      (github.event_name == 'push' && github.ref_name == 'main') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main')
+      always() &&
+      (needs.scan-fs.result == 'success' || needs.scan-fs.result == 'skipped') &&
+      ((github.event_name == 'push' && github.ref_name == 'main') ||
+       (github.event_name == 'pull_request' && github.base_ref == 'main'))
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
