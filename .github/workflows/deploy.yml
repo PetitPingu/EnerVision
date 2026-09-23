@@ -6,6 +6,12 @@ on:
     types: [completed]
     branches:
       - main
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
     inputs:
       image_tag:
@@ -26,6 +32,7 @@ jobs:
     runs-on: [self-hosted, enervision-vm]
     if: >
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push' &&
@@ -35,16 +42,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+          # workflow_run : infra Terraform toujours au HEAD de main (le build
+          # ne se déclenche pas sur infra/** seul). Les images restent pinées
+          # sur sha-<commit> via steps.image ci-dessous.
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.sha }}
+
+      - name: Show checkout revision
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "ref=$(git rev-parse HEAD)"
+          git log -1 --oneline
 
       - name: Resolve image tag
         id: image
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "tag=sha-${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            # push infra/** : pas de rebuild GHCR, réutiliser le tag branche main
+            echo "tag=main" >> "$GITHUB_OUTPUT"
           fi
+          echo "image_tag=$(cat "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2-)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restore Terraform state
         env:
