@@ -411,3 +411,28 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
+
+  scan-quality:
+    name: "Scan: quality (SonarCloud)"
+    needs:
+      - lint
+      - unit-prediction
+      - integration
+      - e2e
+    if: |
+      always() &&
+      needs.lint.result == 'success' &&
+      needs.unit-prediction.result == 'success' &&
+      needs.integration.result == 'success' &&
+      needs.e2e.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # historique complet requis pour la pertinence de l'analyse (blame, nouveau code)
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
