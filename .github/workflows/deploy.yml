@@ -80,6 +80,13 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GHCR_READ_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
 
+      - name: Backup Docker volumes before deploy
+        run: |
+          if [ -n "${{ vars.DOCKER_BACKUP_ROOT }}" ]; then
+            export BACKUP_ROOT="${{ vars.DOCKER_BACKUP_ROOT }}"
+          fi
+          bash scripts/backup-docker.sh
+
       - name: Terraform apply
         working-directory: infra
         env:
