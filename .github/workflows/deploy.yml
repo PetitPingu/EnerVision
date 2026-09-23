@@ -97,7 +97,6 @@ jobs:
           TF_VAR_enervision_api_scheme: ${{ vars.ENERVISION_API_SCHEME != '' && vars.ENERVISION_API_SCHEME || 'https' }}
           TF_VAR_enervision_api_host: ${{ vars.ENERVISION_API_HOST != '' && vars.ENERVISION_API_HOST || 'api-mock.charlieandre.fr' }}
           TF_VAR_enervision_api_port: ${{ vars.ENERVISION_API_PORT }}
-          TF_VAR_cors_origins: ${{ vars.CORS_ORIGINS != '' && vars.CORS_ORIGINS || format('http://{0}:3000,http://{0},http://{0}:8000', secrets.DEPLOY_HOST) }}
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
           TF_VAR_dashboard_api_bff_url: ${{ vars.DASHBOARD_API_BFF_URL }}
         run: |
