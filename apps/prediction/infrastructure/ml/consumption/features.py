@@ -15,10 +15,15 @@ NOTE (test A/B) : temperature_celsius temporairement retirée des features.
 import pandas as pd
 
 # Colonnes minimales attendues en entrée (résultat d'une requête Postgres).
+# site_type n'est pas fourni par /predict (voir application/consumption/predict.py)
+# - seulement par les données d'entraînement - le pipeline apprend la
+# correspondance site_id -> site_type au fit (SiteTypeWeekendExpander,
+# infrastructure/ml/consumption/pipeline.py) pour ne pas en dépendre à l'inférence.
 RAW_COLUMNS = [
     "site_id",
     "timestamp",
     "consumption_kwh",
+    "site_type",
 ]
 
 # Composantes temporelles extraites du timestamp.
@@ -26,8 +31,13 @@ RAW_COLUMNS = [
 # traité en catégoriel dans le pipeline (voir infrastructure/ml/consumption/pipeline.py).
 TEMPORAL_FEATURES = ["hour", "minute", "day_of_week"]
 
-# Colonnes utilisées comme features par le modèle.
+# Colonnes fournies par /predict (le "contrat" d'entrée du modèle à l'inférence).
 FEATURE_COLUMNS = ["site_id", *TEMPORAL_FEATURES]
+
+# site_type : présent uniquement dans les données d'entraînement, consommé par
+# SiteTypeWeekendExpander.fit() pour construire la correspondance site_id ->
+# site_type (voir infrastructure/ml/consumption/pipeline.py).
+TRAINING_ONLY_COLUMNS = ["site_type"]
 
 # Variable cible (consommation à prédire).
 TARGET_COLUMN = "consumption_kwh"
@@ -66,6 +76,7 @@ def build_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
         [
             cleaned[["site_id"]].reset_index(drop=True),
             temporal.reset_index(drop=True),
+            cleaned[TRAINING_ONLY_COLUMNS].reset_index(drop=True),
         ],
         axis=1,
     )

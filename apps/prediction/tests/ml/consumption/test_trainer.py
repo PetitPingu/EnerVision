@@ -13,6 +13,7 @@ def _sample_raw_df() -> pd.DataFrame:
                 "timestamp": f"2024-06-15T{8 + (i % 10):02d}:00:00",
                 "consumption_kwh": 10.0 + i,
                 "temperature_celsius": 18.0 + (i % 5),
+                "site_type": "industrial" if i % 2 == 0 else "commercial",
             }
         )
     return pd.DataFrame(rows)

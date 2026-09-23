@@ -3,6 +3,7 @@ import pandas as pd
 from infrastructure.ml.consumption.features import (
     FEATURE_COLUMNS,
     TARGET_COLUMN,
+    TRAINING_ONLY_COLUMNS,
     build_features,
     extract_temporal_features,
 )
@@ -44,15 +45,17 @@ def test_build_features():
                 "2024-06-15T18:00:00",
             ],
             "consumption_kwh": [12.5, 8.3, None],
+            "site_type": ["industrial", "commercial", "industrial"],
         }
     )
     x, y = build_features(df)
 
-    assert list(x.columns) == FEATURE_COLUMNS
+    assert list(x.columns) == [*FEATURE_COLUMNS, *TRAINING_ONLY_COLUMNS]
     assert len(x) == 2
     assert y.iloc[0] == 12.5
     assert x.loc[0, "site_id"] == "SITE001"
     assert x.loc[0, "hour"] == 14
     assert x.loc[0, "minute"] == 0
     assert x.loc[0, "day_of_week"] == 5  # 2024-06-15 est un samedi
+    assert x.loc[0, "site_type"] == "industrial"
     assert TARGET_COLUMN not in x.columns
