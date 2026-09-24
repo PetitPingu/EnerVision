@@ -38,4 +38,4 @@ def test_train_and_publish_calls_model_store(monkeypatch):
     assert saved_pipeline is result.training.pipeline
     assert result.object_prefix == "energy-consumption/2026-09-16T14-30-00Z"
     assert result.training.mae >= 0
-    assert saved_metadata.features == ("site_id", "hour", "minute")
+    assert saved_metadata.features == ("site_id", "hour", "minute", "day_of_week")

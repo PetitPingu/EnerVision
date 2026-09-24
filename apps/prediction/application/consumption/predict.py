@@ -177,6 +177,7 @@ def _build_prediction_input(
                 "site_id": site_id,
                 "hour": ts.hour,
                 "minute": ts.minute,
+                "day_of_week": ts.weekday(),
             }
             for ts in timestamps
         ],

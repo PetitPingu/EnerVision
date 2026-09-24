@@ -42,6 +42,7 @@ def test_postgres_training_data_reader_fetch(monkeypatch):
             "site_id": ["SITE001"],
             "timestamp": ["2026-09-07T00:00:00"],
             "consumption_kwh": [100.0],
+            "site_type": ["industrial"],
         }
     )
 
@@ -72,6 +73,7 @@ def test_postgres_training_data_reader_query_has_no_data_quality_filter():
             ReadingCurated.site_id,
             ReadingCurated.timestamp,
             ReadingCurated.consumption_kwh,
+            ReadingCurated.site_type,
         )
         .where(ReadingCurated.consumption_kwh.is_not(None))
         .order_by(ReadingCurated.timestamp)

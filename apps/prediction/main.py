@@ -2,9 +2,11 @@
 
 Composition root : câble l'entraînement planifié (APScheduler) et sert
 l'API. Les modèles ne sont pas mis en cache ici - predict.py/predict_state.py
-les rechargent à chaque appel via model_store.load_latest(), donc une
-promotion par retrain_if_better()/retrain_state_if_better() est visible
-immédiatement, sans redémarrage. Au démarrage, on tente quand même un
+appellent model_store.load_latest() à chaque requête, qui résout l'alias à
+chaque fois (et ne re-télécharge le modèle que s'il a changé, voir
+MlflowModelStore.load_latest), donc une promotion par
+retrain_if_better()/retrain_state_if_better() est visible immédiatement,
+sans redémarrage. Au démarrage, on tente quand même un
 load_latest() de chaque modèle "Production" pour échouer vite (log d'alerte)
 si un modèle n'a encore jamais été entraîné/promu.
 

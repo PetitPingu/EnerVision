@@ -13,6 +13,8 @@ from infrastructure.ml.consumption.features import RAW_COLUMNS
 class MockTrainingDataReader(TrainingDataPort):
     """Retourne des lectures synthétiques pour développer sans base de données."""
 
+    _SITE_TYPES = ["industrial", "commercial", "residential"]
+
     def fetch_training_data(self) -> pd.DataFrame:
         rows = []
         for i in range(40):
@@ -24,6 +26,7 @@ class MockTrainingDataReader(TrainingDataPort):
                     "site_id": f"SITE00{site_num}",
                     "timestamp": f"2026-09-07T{hour:02d}:{minute:02d}:00",
                     "consumption_kwh": 100.0 + site_num * 80 + hour * 5 + (i % 3) * 10,
+                    "site_type": self._SITE_TYPES[site_num % len(self._SITE_TYPES)],
                 }
             )
         return pd.DataFrame(rows, columns=RAW_COLUMNS)

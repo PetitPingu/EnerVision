@@ -38,6 +38,7 @@ class PostgresTrainingDataReader(TrainingDataPort):
                 ReadingCurated.site_id,
                 ReadingCurated.timestamp,
                 ReadingCurated.consumption_kwh,
+                ReadingCurated.site_type,
             )
             .where(ReadingCurated.consumption_kwh.is_not(None))
             .order_by(ReadingCurated.timestamp)
